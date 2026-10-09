@@ -81,6 +81,7 @@ button { cursor: pointer; }
   background:
     linear-gradient(90deg, rgba(5, 7, 18, .78), rgba(5, 7, 18, .52)),
     url("/starry-night-background.jpg") center / cover no-repeat;
+  background-color: #060812;
   color: #f8f4ec;
 }
 
