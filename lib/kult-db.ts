@@ -31,6 +31,16 @@ export async function ensureSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )`,
+        sql`ALTER TABLE registrations ADD COLUMN IF NOT EXISTS ticket_price INTEGER`,
+        sql`ALTER TABLE registrations ADD COLUMN IF NOT EXISTS total_amount INTEGER`,
+        sql`UPDATE registrations SET ticket_price = 599 WHERE ticket_price IS NULL`,
+        sql`UPDATE registrations
+            SET total_amount = ticket_price * (1 + companion_count)
+            WHERE total_amount IS NULL`,
+        sql`ALTER TABLE registrations ALTER COLUMN ticket_price SET DEFAULT 599`,
+        sql`ALTER TABLE registrations ALTER COLUMN ticket_price SET NOT NULL`,
+        sql`ALTER TABLE registrations ALTER COLUMN total_amount SET DEFAULT 599`,
+        sql`ALTER TABLE registrations ALTER COLUMN total_amount SET NOT NULL`,
         sql`CREATE TABLE IF NOT EXISTS companions (
           id TEXT PRIMARY KEY,
           registration_id TEXT NOT NULL REFERENCES registrations(id) ON DELETE CASCADE,
@@ -50,6 +60,7 @@ export async function ensureSchema() {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           UNIQUE (registration_id, ticket_number)
         )`,
+        sql`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS organizer_note TEXT NOT NULL DEFAULT ''`,
         sql`CREATE INDEX IF NOT EXISTS idx_tickets_registration_id ON tickets(registration_id)`,
         sql`INSERT INTO tickets (id, registration_id, holder_name, ticket_number)
             SELECT 'legacy-' || md5('registrant:' || registrations.id), registrations.id, registrations.full_name, 1
@@ -84,8 +95,12 @@ export async function ensureSchema() {
         sql`CREATE TABLE IF NOT EXISTS event_settings (
           id SMALLINT PRIMARY KEY CHECK (id = 1),
           allow_over_capacity BOOLEAN NOT NULL DEFAULT FALSE,
+          ticket_price INTEGER NOT NULL DEFAULT 599,
+          capacity_limit INTEGER NOT NULL DEFAULT 35,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )`,
+        sql`ALTER TABLE event_settings ADD COLUMN IF NOT EXISTS ticket_price INTEGER NOT NULL DEFAULT 599`,
+        sql`ALTER TABLE event_settings ADD COLUMN IF NOT EXISTS capacity_limit INTEGER NOT NULL DEFAULT 35`,
         sql`INSERT INTO event_settings (id, allow_over_capacity)
             VALUES (1, FALSE)
             ON CONFLICT (id) DO NOTHING`,

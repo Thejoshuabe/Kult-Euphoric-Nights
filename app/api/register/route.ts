@@ -1,5 +1,4 @@
 import {
-  CAPACITY_LIMIT,
   createTenDigitCode,
   getDatabase,
   getRegistrationStatus,
@@ -98,7 +97,7 @@ export async function POST(request: Request) {
             SELECT pg_advisory_xact_lock(676735)
           ),
           settings AS MATERIALIZED (
-            SELECT allow_over_capacity
+            SELECT allow_over_capacity, capacity_limit, ticket_price
             FROM event_settings, capacity_lock
             WHERE id = 1
           ),
@@ -109,14 +108,16 @@ export async function POST(request: Request) {
           inserted_registration AS (
             INSERT INTO registrations (
               id, code, client_registration_id, full_name, phone, email,
-              normalized_phone, normalized_email, companion_count, payment_confirmation_sent
+              normalized_phone, normalized_email, companion_count, payment_confirmation_sent,
+              ticket_price, total_amount
             )
             SELECT
               ${registrationId}, ${code}, ${clientRegistrationId}, ${fullName}, ${phone}, ${email},
-              ${normalizedPhone}, ${normalizedEmail}, ${companions.length}, TRUE
+              ${normalizedPhone}, ${normalizedEmail}, ${companions.length}, TRUE,
+              settings.ticket_price, settings.ticket_price * ${partySize}
             FROM settings, attendance
             WHERE settings.allow_over_capacity
-               OR attendance.participant_count + ${partySize} <= ${CAPACITY_LIMIT}
+               OR attendance.participant_count + ${partySize} <= settings.capacity_limit
             RETURNING id
           ),
           inserted_companions AS (

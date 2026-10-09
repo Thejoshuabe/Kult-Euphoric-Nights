@@ -328,6 +328,13 @@ button { cursor: pointer; }
 .field-group input:focus, .field-group select:focus { outline: 3px solid rgba(208,13,24,.12); border-color: #d00d18; }
 .field-group > p { margin: -2px 0 0; color: #7a746b; font-size: .78rem; }
 
+.live-total { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; padding: 18px 20px; border: 1px solid #d7d0c6; border-left: 5px solid #d00d18; background: #171513; color: #fff; }
+.live-total > div { display: grid; gap: 2px; }
+.live-total > div:last-child { text-align: right; }
+.live-total span { color: #bdb6ab; font-size: .67rem; font-weight: 900; letter-spacing: .11em; }
+.live-total strong { font-size: 1.5rem; line-height: 1; }
+.live-total-equation { text-align: center; }
+
 .form-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 36px; padding-top: 24px; border-top: 1px solid #e4ded4; }
 .form-actions button { min-height: 47px; border-radius: 4px; font-weight: 800; }
 .next-button { margin-left: auto; min-width: 178px; background: #d00d18 !important; }
@@ -478,6 +485,17 @@ button { cursor: pointer; }
 .capacity-toggle strong { font-size: .86rem; }
 .capacity-toggle small { color: #746e65; font-size: .75rem; }
 
+.event-config-control { display: grid; grid-template-columns: minmax(250px, 1fr) minmax(460px, 1.35fr); gap: 24px; margin-bottom: 18px; padding: 22px; border: 1px solid #d8d1c7; border-top: 5px solid #d00d18; background: #fff; }
+.event-config-copy h2 { margin: 3px 0 4px; font-size: 1.35rem; }
+.event-config-copy p { margin: 0; color: #70695f; font-size: .86rem; }
+.event-config-fields { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 12px; }
+.event-config-fields .field-group { gap: 6px; }
+.event-config-fields .field-group label { font-size: .74rem; }
+.event-config-fields .field-group input { height: 44px; }
+.event-config-fields button { min-height: 44px; border-radius: 4px; background: #171513 !important; font-weight: 800; }
+.event-config-warning { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; margin: 0; padding-top: 12px; border-top: 1px solid #ebe5dc; color: #7a5a16; font-size: .78rem; }
+.event-config-warning svg { width: 16px; height: 16px; }
+
 .scanner-control { display: flex; align-items: center; justify-content: space-between; gap: 26px; margin-bottom: 18px; padding: 22px; border: 1px solid #d8d1c7; background: #171513; color: #fff; }
 .scanner-control h2 { margin: 3px 0 4px; font-size: 1.35rem; }
 .scanner-control p { margin: 0; color: #bdb6ab; font-size: .86rem; }
@@ -523,6 +541,7 @@ button { cursor: pointer; }
 .registrant-cell { display: grid; min-width: 260px; }
 .registrant-cell strong { font-size: .94rem; }
 .registrant-cell span { color: #6c665e; font-size: .78rem; }
+.registrant-cell .registration-amount { margin-top: 7px; color: #176b35; font-weight: 900; }
 .registrant-cell small { margin-top: 5px; color: #9b141c; white-space: normal; }
 .code-chip { padding: 6px 8px; background: #f0ece5; font-family: "Courier New", monospace; font-size: .78rem; font-weight: 800; }
 .check-column { width: 100px; text-align: center !important; }
@@ -538,6 +557,10 @@ button { cursor: pointer; }
 .admin-ticket-row > div strong { font-size: .8rem; }
 .admin-ticket-row > div small { color: #777066; }
 .admin-ticket-row label { display: flex; align-items: center; gap: 6px; color: #625b53; font-size: .72rem; font-weight: 800; }
+.admin-ticket-row .admin-ticket-note { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; gap: 8px; padding-top: 9px; border-top: 1px dashed #d8d1c7; }
+.admin-ticket-note textarea { min-height: 54px; resize: vertical; border: 1px solid #d8d2c8; border-radius: 4px; background: #fff; color: #292623; padding: 9px 10px; font: inherit; font-size: .78rem; }
+.admin-ticket-note textarea:focus { outline: 3px solid rgba(208,13,24,.12); border-color: #d00d18; }
+.admin-ticket-note button { align-self: stretch; min-width: 92px; border-radius: 4px; font-size: .75rem; font-weight: 800; }
 .empty-list { display: grid; justify-items: center; padding: 74px 20px; color: #716a61; text-align: center; }
 .empty-list svg { width: 40px; height: 40px; margin-bottom: 12px; }
 .empty-list h3 { margin: 0; color: #292623; }
@@ -599,6 +622,9 @@ button { cursor: pointer; }
   .admin-content { width: min(100% - 24px, 1320px); padding-top: 34px; }
   .admin-title { align-items: flex-start; flex-direction: column; }
   .stats-grid { grid-template-columns: 1fr; }
+  .event-config-control { grid-template-columns: 1fr; }
+  .event-config-fields { grid-template-columns: 1fr 1fr; }
+  .event-config-fields button { grid-column: 1 / -1; }
   .capacity-control { align-items: stretch; flex-direction: column; }
   .capacity-toggle { min-width: 0; width: 100%; }
   .scanner-control { align-items: stretch; flex-direction: column; }
@@ -612,6 +638,11 @@ button { cursor: pointer; }
   .add-person-actions { align-items: stretch; flex-direction: column; }
   .add-person-actions button { width: 100%; }
   .admin-header button span:not(.mini-mark) { display: none; }
+  .live-total { grid-template-columns: 1fr auto; }
+  .live-total-equation { grid-column: 1 / -1; grid-row: 2; text-align: left; }
+  .admin-ticket-row { grid-template-columns: 1fr 1fr; }
+  .admin-ticket-row > div:first-child { grid-column: 1 / -1; }
+  .admin-ticket-note { grid-column: 1 / -1 !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

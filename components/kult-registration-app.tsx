@@ -11,6 +11,7 @@ import {
   Clock3,
   Download,
   ExternalLink,
+  IndianRupee,
   LoaderCircle,
   LockKeyhole,
   LogOut,
@@ -18,6 +19,7 @@ import {
   Plus,
   QrCode,
   Search,
+  Save,
   ShieldCheck,
   Trash2,
   Users,
@@ -48,6 +50,8 @@ type Registration = {
   phone: string;
   email: string;
   companion_count: number;
+  ticket_price: number;
+  total_amount: number;
   verified: boolean;
   arrived: boolean;
   created_at: string;
@@ -75,6 +79,7 @@ type AdminTicket = {
   ticket_number: number;
   enabled: boolean;
   arrived: boolean;
+  organizer_note: string;
 };
 
 type RegistrationStatus = {
@@ -85,6 +90,7 @@ type RegistrationStatus = {
   capacityReached: boolean;
   allowOverCapacity: boolean;
   registrationOpen: boolean;
+  ticketPrice: number;
 };
 
 const EVENT = {
@@ -92,8 +98,13 @@ const EVENT = {
   time: "4 PM – 10 PM",
   place: "Talk of the Town Restaurant, Edappally",
   dress: "Come as your version of the night.",
-  ticketPrice: 599,
 };
+
+const rupees = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+});
 
 async function fetchRegistrationStatus() {
   const response = await fetch("/api/registration-status", { cache: "no-store" });
@@ -340,8 +351,8 @@ function RegistrationGate({
             <p className="eyebrow">TICKET UPDATE</p>
             <h1>Early birds are sold out.</h1>
             <p>The first {status?.earlyBirdLimit ?? 5} participant spots have been claimed. General admission is still open.</p>
-            <div className="gate-price"><span>GENERAL ADMISSION</span><strong>₹{EVENT.ticketPrice}</strong><small>per participant</small></div>
-            <Button className="next-button gate-button" onClick={onContinue}>Continue with ₹{EVENT.ticketPrice} ticket</Button>
+            <div className="gate-price"><span>GENERAL ADMISSION</span><strong>{rupees.format(status?.ticketPrice ?? 599)}</strong><small>per participant</small></div>
+            <Button className="next-button gate-button" onClick={onContinue}>Continue with {rupees.format(status?.ticketPrice ?? 599)} ticket</Button>
           </>
         )}
         {kind === "closed" && (
@@ -523,6 +534,9 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
   }
 
   const progress = Math.min(step, 4) * 25;
+  const ticketCount = 1 + companionCount;
+  const ticketPrice = registrationStatus.ticketPrice;
+  const totalAmount = ticketPrice * ticketCount;
   const titles: Record<number, [string, string]> = {
     1: ["Tell us about you", "One registration per phone number and email."],
     2: ["Who’s coming with you?", "Add each accompanying guest so the door list is accurate."],
@@ -573,6 +587,11 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
                   {Array.from({ length: Math.min(8, registrationStatus.allowOverCapacity ? 8 : Math.max(0, registrationStatus.capacityLimit - registrationStatus.participantCount - 1)) + 1 }, (_, count) => <option key={count} value={count}>{count === 0 ? "Just me" : `${count} ${count === 1 ? "guest" : "guests"}`}</option>)}
                 </select>
               </Field>
+              <div className="live-total" aria-live="polite">
+                <div><span>TICKETS</span><strong>{ticketCount}</strong></div>
+                <span className="live-total-equation">{ticketCount} × {rupees.format(ticketPrice)}</span>
+                <div><span>TOTAL TO PAY</span><strong>{rupees.format(totalAmount)}</strong></div>
+              </div>
             </div>
           )}
 
@@ -597,7 +616,7 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
           {step === 3 && (
             <div className="payment-layout">
               <div className="qr-card">
-                <div className="ticket-price"><span>TICKET PRICE</span><strong>₹{EVENT.ticketPrice}</strong><small>per participant · Group total ₹{EVENT.ticketPrice * (1 + companionCount)}</small></div>
+                <div className="ticket-price"><span>TOTAL PAYMENT</span><strong>{rupees.format(totalAmount)}</strong><small>{ticketCount} {ticketCount === 1 ? "ticket" : "tickets"} × {rupees.format(ticketPrice)} each</small></div>
                 <img src="/gpay-qr.jpg" alt="Google Pay QR code for Shreyaan Sreenivas, UPI ID shreyaansreenivas5@okaxis" />
               </div>
               <div className="payment-copy">
@@ -605,7 +624,7 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
                 <h3>Pay in 3 clear steps</h3>
                 <ol className="payment-steps">
                   <li><span>1</span><div><strong>Open your UPI app</strong><p>Use Google Pay, PhonePe, Paytm, or any UPI app.</p></div></li>
-                  <li><span>2</span><div><strong>Scan this QR and pay</strong><p>Pay ₹{EVENT.ticketPrice} per participant. Your group total is ₹{EVENT.ticketPrice * (1 + companionCount)}.</p></div></li>
+                  <li><span>2</span><div><strong>Scan this QR and pay {rupees.format(totalAmount)}</strong><p>{ticketCount} {ticketCount === 1 ? "ticket" : "tickets"} × {rupees.format(ticketPrice)} per participant = <b>{rupees.format(totalAmount)}</b>.</p></div></li>
                   <li><span>3</span><div><strong>Save your payment proof</strong><p>Take a clear screenshot of the successful payment screen.</p></div></li>
                 </ol>
                 <div className="upi-id"><span>UPI ID</span><strong>shreyaansreenivas5@okaxis</strong></div>
@@ -780,6 +799,12 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
   const [deletingId, setDeletingId] = useState("");
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
   const [savingCapacity, setSavingCapacity] = useState(false);
+  const [eventConfig, setEventConfig] = useState({ ticketPrice: 599, capacityLimit: 35 });
+  const [savingEventConfig, setSavingEventConfig] = useState(false);
+  const [eventConfigSaved, setEventConfigSaved] = useState(false);
+  const [ticketNotes, setTicketNotes] = useState<Record<string, string>>({});
+  const [savingTicketNoteId, setSavingTicketNoteId] = useState("");
+  const [savedTicketNoteId, setSavedTicketNoteId] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerState, setScannerState] = useState<"idle" | "starting" | "scanning" | "checking" | "success" | "error">("idle");
   const [scannerMessage, setScannerMessage] = useState("");
@@ -799,6 +824,10 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
       setCompanions(data.companions ?? []);
       setTickets(data.tickets ?? []);
       setRegistrationStatus(data.status ?? null);
+      if (data.status) {
+        setEventConfig({ ticketPrice: data.status.ticketPrice, capacityLimit: data.status.capacityLimit });
+      }
+      setTicketNotes(Object.fromEntries((data.tickets ?? []).map((ticket) => [ticket.id, ticket.organizer_note ?? ""])));
       setAccess("dashboard");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load registrations.");
@@ -974,6 +1003,65 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
     }
   }
 
+  async function saveEventConfig(event: React.FormEvent) {
+    event.preventDefault();
+    const ticketPrice = Number(eventConfig.ticketPrice);
+    const capacityLimit = Number(eventConfig.capacityLimit);
+    if (!Number.isInteger(ticketPrice) || ticketPrice < 1) {
+      setError("Enter a valid whole-number ticket price.");
+      return;
+    }
+    if (!Number.isInteger(capacityLimit) || capacityLimit < 1) {
+      setError("Enter a valid ticket limit.");
+      return;
+    }
+    setSavingEventConfig(true);
+    setEventConfigSaved(false);
+    setError("");
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ setting: "eventConfig", ticketPrice, capacityLimit }),
+      });
+      const data = (await response.json()) as { status?: RegistrationStatus; error?: string };
+      if (!response.ok) throw new Error(data.error || "Could not update ticket settings.");
+      if (data.status) {
+        setRegistrationStatus(data.status);
+        setEventConfig({ ticketPrice: data.status.ticketPrice, capacityLimit: data.status.capacityLimit });
+      }
+      setEventConfigSaved(true);
+      window.setTimeout(() => setEventConfigSaved(false), 2500);
+    } catch (settingsError) {
+      setError(settingsError instanceof Error ? settingsError.message : "Could not update ticket settings.");
+    } finally {
+      setSavingEventConfig(false);
+    }
+  }
+
+  async function saveTicketNote(ticketId: string) {
+    setSavingTicketNoteId(ticketId);
+    setSavedTicketNoteId("");
+    setError("");
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticketId, ticketNote: ticketNotes[ticketId] ?? "" }),
+      });
+      const data = (await response.json()) as { note?: string; error?: string };
+      if (!response.ok) throw new Error(data.error || "Could not save ticket note.");
+      setTickets((current) => current.map((ticket) => ticket.id === ticketId ? { ...ticket, organizer_note: data.note ?? "" } : ticket));
+      setTicketNotes((current) => ({ ...current, [ticketId]: data.note ?? "" }));
+      setSavedTicketNoteId(ticketId);
+      window.setTimeout(() => setSavedTicketNoteId((current) => current === ticketId ? "" : current), 2500);
+    } catch (noteError) {
+      setError(noteError instanceof Error ? noteError.message : "Could not save ticket note.");
+    } finally {
+      setSavingTicketNoteId("");
+    }
+  }
+
   async function addPerson(event: React.FormEvent) {
     event.preventDefault();
     setSavingPerson(true);
@@ -1082,15 +1170,32 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
             {(scannerState === "success" || scannerState === "error") && <Button className="scanner-next" onClick={() => void startScanner()}>Scan next ticket</Button>}
           </div>
         )}
+        <form className="event-config-control" onSubmit={saveEventConfig}>
+          <div className="event-config-copy">
+            <span className="capacity-kicker">TICKET SETTINGS</span>
+            <h2>Set the live price and ticket limit</h2>
+            <p>These values update the public payment total and the number of participant tickets available.</p>
+          </div>
+          <div className="event-config-fields">
+            <Field label="Price per ticket (₹)" htmlFor="ticket-price-setting">
+              <Input id="ticket-price-setting" type="number" min={1} max={1000000} step={1} value={eventConfig.ticketPrice} onChange={(event) => setEventConfig((current) => ({ ...current, ticketPrice: Number(event.target.value) }))} />
+            </Field>
+            <Field label="Ticket limit" htmlFor="ticket-limit-setting">
+              <Input id="ticket-limit-setting" type="number" min={1} max={10000} step={1} value={eventConfig.capacityLimit} onChange={(event) => setEventConfig((current) => ({ ...current, capacityLimit: Number(event.target.value) }))} />
+            </Field>
+            <Button type="submit" disabled={savingEventConfig}><Save />{savingEventConfig ? "Saving…" : eventConfigSaved ? "Saved" : "Save settings"}</Button>
+          </div>
+          <p className="event-config-warning"><IndianRupee /> Existing registrations keep their recorded amount. New registrations use the updated price.</p>
+        </form>
         <div className={`capacity-control ${registrationStatus?.registrationOpen ? "open" : "paused"}`}>
           <div>
             <span className="capacity-kicker">REGISTRATION CAPACITY</span>
             <h2>{registrationStatus?.registrationOpen ? "Registration is open" : "Registration is paused"}</h2>
-            <p>The public form automatically pauses at {registrationStatus?.capacityLimit ?? 35} participants. Current attendance: <strong>{participantCount} / {registrationStatus?.capacityLimit ?? 35}</strong>.</p>
+            <p>The public form automatically pauses at {registrationStatus?.capacityLimit ?? 35} participant tickets. Current attendance: <strong>{participantCount} / {registrationStatus?.capacityLimit ?? 35}</strong>.</p>
           </div>
           <label className="capacity-toggle">
             <Checkbox checked={Boolean(registrationStatus?.allowOverCapacity)} disabled={savingCapacity} onCheckedChange={(checked) => void toggleCapacityOverride(checked === true)} />
-            <span><strong>Allow registrations beyond 35</strong><small>Turn this on to reopen the public form after it reaches capacity.</small></span>
+            <span><strong>Allow registrations beyond {registrationStatus?.capacityLimit ?? 35}</strong><small>Turn this on only when you intentionally want to exceed the saved ticket limit.</small></span>
           </label>
         </div>
         <div className="admin-table-card">
@@ -1134,9 +1239,9 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
                   return (
                     <TableRow key={row.id}>
                       <TableCell>
-                        <div className="registrant-cell"><strong>{row.full_name}</strong><span>{row.phone} · {row.email}</span>{guests.length > 0 && <small>Guests: {guests.map((guest) => guest.full_name).join(", ")}</small>}</div>
+                        <div className="registrant-cell"><strong>{row.full_name}</strong><span>{row.phone} · {row.email}</span><span className="registration-amount">{1 + Number(row.companion_count)} {1 + Number(row.companion_count) === 1 ? "ticket" : "tickets"} · {rupees.format(Number(row.total_amount))} expected</span>{guests.length > 0 && <small>Guests: {guests.map((guest) => guest.full_name).join(", ")}</small>}</div>
                       </TableCell>
-                      <TableCell><div className="admin-ticket-list">{rowTickets.map((ticket) => <div className={`admin-ticket-row ${ticket.enabled ? "" : "disabled"}`} key={ticket.id}><div><strong>#{ticket.ticket_number} · {ticket.holder_name}</strong><small>{ticket.arrived ? "Arrived" : ticket.enabled ? "Ready" : "Disabled"}</small></div><label><Checkbox aria-label={`Enable ticket for ${ticket.holder_name}`} checked={Boolean(ticket.enabled)} onCheckedChange={(checked) => void toggleTicket(ticket.id, "enabled", checked === true)} /><span>Enabled</span></label><label><Checkbox aria-label={`Mark ticket for ${ticket.holder_name} arrived`} checked={Boolean(ticket.arrived)} disabled={!ticket.enabled} onCheckedChange={(checked) => void toggleTicket(ticket.id, "arrived", checked === true)} /><span>Arrived</span></label></div>)}</div></TableCell>
+                      <TableCell><div className="admin-ticket-list">{rowTickets.map((ticket) => <div className={`admin-ticket-row ${ticket.enabled ? "" : "disabled"}`} key={ticket.id}><div><strong>#{ticket.ticket_number} · {ticket.holder_name}</strong><small>{ticket.arrived ? "Arrived" : ticket.enabled ? "Ready" : "Disabled"}</small></div><label><Checkbox aria-label={`Enable ticket for ${ticket.holder_name}`} checked={Boolean(ticket.enabled)} onCheckedChange={(checked) => void toggleTicket(ticket.id, "enabled", checked === true)} /><span>Enabled</span></label><label><Checkbox aria-label={`Mark ticket for ${ticket.holder_name} arrived`} checked={Boolean(ticket.arrived)} disabled={!ticket.enabled} onCheckedChange={(checked) => void toggleTicket(ticket.id, "arrived", checked === true)} /><span>Arrived</span></label><div className="admin-ticket-note"><textarea aria-label={`Organizer note for ${ticket.holder_name}`} maxLength={500} rows={2} value={ticketNotes[ticket.id] ?? ""} onChange={(event) => setTicketNotes((current) => ({ ...current, [ticket.id]: event.target.value }))} placeholder="Private organizer note for this ticket…" /><Button type="button" variant="outline" onClick={() => void saveTicketNote(ticket.id)} disabled={savingTicketNoteId === ticket.id || (ticketNotes[ticket.id] ?? "") === ticket.organizer_note}>{savingTicketNoteId === ticket.id ? "Saving…" : savedTicketNoteId === ticket.id ? "Saved" : "Save note"}</Button></div></div>)}</div></TableCell>
                       <TableCell className="check-column"><Checkbox aria-label={`Verify ${row.full_name}`} checked={Boolean(row.verified)} onCheckedChange={(checked) => toggle(row.id, "verified", checked === true)} /></TableCell>
                       <TableCell className="action-column"><Button variant="ghost" className="remove-person-button" onClick={() => removePerson(row)} disabled={deletingId === row.id}><Trash2 aria-hidden="true" />{deletingId === row.id ? "Removing…" : "Remove"}</Button></TableCell>
                     </TableRow>

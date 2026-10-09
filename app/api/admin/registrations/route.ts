@@ -1,5 +1,4 @@
 import {
-  CAPACITY_LIMIT,
   createTenDigitCode,
   getDatabase,
   getRegistrationStatus,
@@ -17,10 +16,11 @@ export async function GET(request: Request) {
     const sql = await getDatabase();
     const [registrations, companions, tickets] = await sql.transaction(
       [
-        sql`SELECT id, full_name, phone, email, companion_count, verified, arrived, created_at
+        sql`SELECT id, full_name, phone, email, companion_count, ticket_price, total_amount,
+                   verified, arrived, created_at
             FROM registrations ORDER BY created_at DESC`,
         sql`SELECT id, registration_id, full_name, phone FROM companions ORDER BY registration_id, full_name`,
-        sql`SELECT id, registration_id, holder_name, ticket_number, enabled, arrived
+        sql`SELECT id, registration_id, holder_name, ticket_number, enabled, arrived, organizer_note
             FROM tickets ORDER BY registration_id, ticket_number`,
       ],
       { readOnly: true },
@@ -41,9 +41,12 @@ export async function PATCH(request: Request) {
       id?: string;
       field?: "verified" | "arrived";
       value?: boolean;
-      setting?: "allowOverCapacity";
+      setting?: "allowOverCapacity" | "eventConfig";
+      ticketPrice?: number;
+      capacityLimit?: number;
       ticketId?: string;
       ticketField?: "enabled" | "arrived";
+      ticketNote?: string;
     };
     if (payload.setting === "allowOverCapacity" && typeof payload.value === "boolean") {
       const sql = await getDatabase();
@@ -53,6 +56,37 @@ export async function PATCH(request: Request) {
         WHERE id = 1
       `;
       return Response.json({ ok: true, status: await getRegistrationStatus() });
+    }
+    if (payload.setting === "eventConfig") {
+      const ticketPrice = Number(payload.ticketPrice);
+      const capacityLimit = Number(payload.capacityLimit);
+      if (!Number.isInteger(ticketPrice) || ticketPrice < 1 || ticketPrice > 1000000) {
+        return Response.json({ error: "Ticket price must be a whole number between ₹1 and ₹10,00,000." }, { status: 400 });
+      }
+      if (!Number.isInteger(capacityLimit) || capacityLimit < 1 || capacityLimit > 10000) {
+        return Response.json({ error: "Ticket limit must be a whole number between 1 and 10,000." }, { status: 400 });
+      }
+      const sql = await getDatabase();
+      await sql`
+        UPDATE event_settings
+        SET ticket_price = ${ticketPrice}, capacity_limit = ${capacityLimit}, updated_at = NOW()
+        WHERE id = 1
+      `;
+      return Response.json({ ok: true, status: await getRegistrationStatus() });
+    }
+    if (payload.ticketId && typeof payload.ticketNote === "string") {
+      const note = payload.ticketNote.trim();
+      if (note.length > 500) {
+        return Response.json({ error: "Ticket notes can contain up to 500 characters." }, { status: 400 });
+      }
+      const sql = await getDatabase();
+      const updated = await sql`
+        UPDATE tickets SET organizer_note = ${note}, updated_at = NOW()
+        WHERE id = ${payload.ticketId}
+        RETURNING id
+      `;
+      if (!updated[0]) return Response.json({ error: "Ticket not found." }, { status: 404 });
+      return Response.json({ ok: true, note });
     }
     if (payload.ticketId && ["enabled", "arrived"].includes(payload.ticketField ?? "") && typeof payload.value === "boolean") {
       const sql = await getDatabase();
@@ -133,7 +167,7 @@ export async function POST(request: Request) {
             SELECT pg_advisory_xact_lock(676735)
           ),
           settings AS MATERIALIZED (
-            SELECT allow_over_capacity
+            SELECT allow_over_capacity, capacity_limit, ticket_price
             FROM event_settings, capacity_lock
             WHERE id = 1
           ),
@@ -144,14 +178,16 @@ export async function POST(request: Request) {
           inserted_registration AS (
             INSERT INTO registrations (
               id, code, client_registration_id, full_name, phone, email,
-              normalized_phone, normalized_email, companion_count, payment_confirmation_sent
+              normalized_phone, normalized_email, companion_count, payment_confirmation_sent,
+              ticket_price, total_amount
             )
             SELECT
               ${registrationId}, ${code}, ${clientRegistrationId}, ${fullName}, ${phone}, ${email},
-              ${normalizedPhone}, ${normalizedEmail}, 0, TRUE
+              ${normalizedPhone}, ${normalizedEmail}, 0, TRUE,
+              settings.ticket_price, settings.ticket_price
             FROM settings, attendance
             WHERE settings.allow_over_capacity
-               OR attendance.participant_count + 1 <= ${CAPACITY_LIMIT}
+               OR attendance.participant_count + 1 <= settings.capacity_limit
             RETURNING id
           ),
           inserted_ticket AS (
@@ -164,12 +200,13 @@ export async function POST(request: Request) {
         `;
         if (!inserted[0]) {
           return Response.json(
-            { error: "The 35-participant limit has been reached. Enable additional registrations first." },
+            { error: "The ticket limit has been reached. Increase the limit or enable additional registrations first." },
             { status: 409 },
           );
         }
         const created = await sql`
-          SELECT id, full_name, phone, email, companion_count, verified, arrived, created_at
+          SELECT id, full_name, phone, email, companion_count, ticket_price, total_amount,
+                 verified, arrived, created_at
           FROM registrations WHERE id = ${registrationId} LIMIT 1
         `;
         return Response.json({ registration: created[0] }, { status: 201 });
