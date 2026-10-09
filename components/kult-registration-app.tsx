@@ -14,8 +14,10 @@ import {
   LockKeyhole,
   LogOut,
   MapPin,
+  Plus,
   Search,
   ShieldCheck,
+  Trash2,
   Users,
   XCircle,
 } from "lucide-react";
@@ -447,12 +449,20 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
               </div>
               <div className="payment-copy">
                 <span className="secure-pill"><ShieldCheck /> UPI PAYMENT</span>
-                <h3>Scan and pay</h3>
-                <p>Open any UPI app, scan the code, enter the event amount you were given, and complete the payment.</p>
+                <h3>Pay in 3 clear steps</h3>
+                <ol className="payment-steps">
+                  <li><span>1</span><div><strong>Open your UPI app</strong><p>Use Google Pay, PhonePe, Paytm, or any UPI app.</p></div></li>
+                  <li><span>2</span><div><strong>Scan this QR and pay</strong><p>Pay the event amount you were given, then wait for the payment to complete.</p></div></li>
+                  <li><span>3</span><div><strong>Save your payment proof</strong><p>Take a clear screenshot of the successful payment screen.</p></div></li>
+                </ol>
                 <div className="upi-id"><span>UPI ID</span><strong>irfanmnh48@oksbi</strong></div>
                 <a className="download-link" href="/payment-qr.png" download="kult-events-payment-qr.png">
                   <Download aria-hidden="true" /> Download QR to gallery
                 </a>
+                <div className="payment-critical" role="alert">
+                  <strong>IMPORTANT: SEND YOUR SCREENSHOT</strong>
+                  <p>After paying, send the screenshot to <b>@kult.events.in</b>. Without this proof, your payment cannot be checked and your registration will be invalid.</p>
+                </div>
               </div>
             </div>
           )}
@@ -585,6 +595,10 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newPerson, setNewPerson] = useState({ fullName: "", phone: "", email: "" });
+  const [savingPerson, setSavingPerson] = useState(false);
+  const [deletingId, setDeletingId] = useState("");
 
   const loadRegistrations = useCallback(async () => {
     try {
@@ -651,6 +665,49 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
     }
   }
 
+  async function addPerson(event: React.FormEvent) {
+    event.preventDefault();
+    setSavingPerson(true);
+    setError("");
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newPerson),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Could not add registration.");
+      setNewPerson({ fullName: "", phone: "", email: "" });
+      setShowAdd(false);
+      await loadRegistrations();
+    } catch (addError) {
+      setError(addError instanceof Error ? addError.message : "Could not add registration.");
+    } finally {
+      setSavingPerson(false);
+    }
+  }
+
+  async function removePerson(row: Registration) {
+    if (!window.confirm(`Remove ${row.full_name} from the registration list? This cannot be undone.`)) return;
+    setDeletingId(row.id);
+    setError("");
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: row.id }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Could not remove registration.");
+      setRows((current) => current.filter((item) => item.id !== row.id));
+      setCompanions((current) => current.filter((item) => item.registration_id !== row.id));
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "Could not remove registration.");
+    } finally {
+      setDeletingId("");
+    }
+  }
+
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return rows;
@@ -704,8 +761,24 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
         <div className="admin-table-card">
           <div className="table-toolbar">
             <div><h2>Registrations</h2><p>Confirm payment first; use Arrived at the door.</p></div>
-            <div className="search-box"><Search /><Input aria-label="Search registrations" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone, email or code" /></div>
+            <div className="table-toolbar-actions">
+              <div className="search-box"><Search /><Input aria-label="Search registrations" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone, email or code" /></div>
+              <Button className="add-person-button" onClick={() => { setShowAdd((current) => !current); setError(""); }}>
+                <Plus aria-hidden="true" /> {showAdd ? "Close" : "Add person"}
+              </Button>
+            </div>
           </div>
+          {showAdd && (
+            <form className="add-person-panel" onSubmit={addPerson}>
+              <div className="add-person-heading"><div><h3>Add a person</h3><p>For walk-ins or manual entries. They will receive a new 10-digit code.</p></div><Users aria-hidden="true" /></div>
+              <div className="add-person-fields">
+                <Field label="Full name" htmlFor="admin-full-name"><Input id="admin-full-name" value={newPerson.fullName} onChange={(event) => setNewPerson((current) => ({ ...current, fullName: event.target.value }))} placeholder="Full name" /></Field>
+                <Field label="Phone number" htmlFor="admin-phone"><Input id="admin-phone" inputMode="tel" value={newPerson.phone} onChange={(event) => setNewPerson((current) => ({ ...current, phone: event.target.value }))} placeholder="+91 98765 43210" /></Field>
+                <Field label="Email ID" htmlFor="admin-email"><Input id="admin-email" type="email" value={newPerson.email} onChange={(event) => setNewPerson((current) => ({ ...current, email: event.target.value }))} placeholder="you@example.com" /></Field>
+              </div>
+              <div className="add-person-actions"><p>Duplicate phone numbers and emails are blocked automatically.</p><Button type="submit" disabled={savingPerson || !newPerson.fullName || !newPerson.phone || !newPerson.email}>{savingPerson ? "Adding…" : "Add to list"}</Button></div>
+            </form>
+          )}
           {error && <div className="form-error admin-error"><XCircle />{error}</div>}
           {rows.length === 0 ? (
             <div className="empty-list"><Users /><h3>No registrations yet</h3><p>Completed registrations will appear here automatically.</p></div>
@@ -718,6 +791,7 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
                   <TableHead>Party</TableHead>
                   <TableHead className="check-column">Verified</TableHead>
                   <TableHead className="check-column">Arrived</TableHead>
+                  <TableHead className="action-column">Manage</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -732,6 +806,7 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
                       <TableCell>{1 + Number(row.companion_count)}</TableCell>
                       <TableCell className="check-column"><Checkbox aria-label={`Verify ${row.full_name}`} checked={Boolean(row.verified)} onCheckedChange={(checked) => toggle(row.id, "verified", checked === true)} /></TableCell>
                       <TableCell className="check-column"><Checkbox aria-label={`Mark ${row.full_name} arrived`} checked={Boolean(row.arrived)} onCheckedChange={(checked) => toggle(row.id, "arrived", checked === true)} /></TableCell>
+                      <TableCell className="action-column"><Button variant="ghost" className="remove-person-button" onClick={() => removePerson(row)} disabled={deletingId === row.id}><Trash2 aria-hidden="true" />{deletingId === row.id ? "Removing…" : "Remove"}</Button></TableCell>
                     </TableRow>
                   );
                 })}

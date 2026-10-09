@@ -78,6 +78,9 @@ button { cursor: pointer; }
   display: flex;
   flex-direction: column;
   padding: 32px clamp(32px, 6vw, 92px) 28px;
+  background:
+    linear-gradient(90deg, rgba(5, 7, 18, .78), rgba(5, 7, 18, .52)),
+    url("/starry-night-background.jpg") center / cover no-repeat;
   color: #f8f4ec;
 }
 
@@ -316,12 +319,20 @@ button { cursor: pointer; }
 .secure-pill svg { width: 15px; height: 15px; }
 .payment-copy h3, .proof-panel h3 { margin: 17px 0 10px; font-size: 2rem; letter-spacing: -.035em; }
 .payment-copy > p, .proof-panel > p { margin: 0; color: #6f6961; }
+.payment-steps { display: grid; gap: 13px; margin: 22px 0 0; padding: 0; list-style: none; }
+.payment-steps li { display: grid; grid-template-columns: 32px 1fr; gap: 11px; align-items: start; }
+.payment-steps li > span { display: grid; place-content: center; width: 30px; height: 30px; border-radius: 50%; background: #171513; color: #fff; font-weight: 900; }
+.payment-steps strong { display: block; margin-top: 2px; font-size: .98rem; }
+.payment-steps p { margin: 2px 0 0; color: #6f6961; font-size: .88rem; line-height: 1.4; }
 .upi-id { display: grid; gap: 3px; margin: 24px 0 18px; padding: 14px; border-left: 3px solid #d00d18; background: #f2eee7; }
 .upi-id span { font-size: .66rem; font-weight: 900; letter-spacing: .14em; color: #786f65; }
 .upi-id strong { font-size: .95rem; }
 .download-link { display: inline-flex; align-items: center; gap: 8px; color: #b30a13; font-weight: 800; text-decoration: none; }
 .download-link:hover { text-decoration: underline; }
 .download-link svg { width: 18px; }
+.payment-critical { margin-top: 25px; padding: 16px 17px; border: 2px solid #c50d18; background: #fff0f1; color: #7f1118; }
+.payment-critical strong { display: block; font-size: .92rem; letter-spacing: .06em; }
+.payment-critical p { margin: 5px 0 0; font-size: .9rem; line-height: 1.45; }
 
 .proof-panel { max-width: 620px; padding: 10px 0; }
 .instagram-mark { width: 58px; height: 58px; display: grid; place-content: center; border: 2px solid #d00d18; border-radius: 50%; color: #d00d18; font-family: Georgia, serif; font-size: 2rem; font-weight: 800; }
@@ -400,9 +411,24 @@ button { cursor: pointer; }
 .table-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 22px; border-bottom: 1px solid #dfd8ce; }
 .table-toolbar h2 { margin: 0; font-size: 1.35rem; }
 .table-toolbar p { margin: 3px 0 0; color: #776f66; font-size: .84rem; }
+.table-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; width: min(580px, 100%); }
 .search-box { width: min(390px, 100%); position: relative; }
 .search-box svg { position: absolute; left: 12px; top: 50%; width: 17px; transform: translateY(-50%); color: #746e65; }
 .search-box input { padding-left: 38px; border-radius: 4px; }
+.add-person-button { min-height: 42px; white-space: nowrap; border-radius: 4px; background: #171513 !important; font-weight: 800; }
+.add-person-button:hover { background: #d00d18 !important; }
+.add-person-panel { padding: 20px 22px 22px; border-bottom: 1px solid #dfd8ce; background: #faf8f4; }
+.add-person-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.add-person-heading h3 { margin: 0; font-size: 1.15rem; }
+.add-person-heading p { margin: 3px 0 0; color: #776f66; font-size: .84rem; }
+.add-person-heading > svg { width: 22px; height: 22px; color: #d00d18; }
+.add-person-fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 17px; }
+.add-person-fields .field-group { gap: 6px; }
+.add-person-fields .field-group label { font-size: .74rem; }
+.add-person-fields .field-group input { height: 44px; background: #fff; }
+.add-person-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; }
+.add-person-actions p { margin: 0; color: #776f66; font-size: .77rem; }
+.add-person-actions button { min-height: 42px; border-radius: 4px; background: #d00d18 !important; font-weight: 800; }
 .admin-table-card th { color: #70695f; font-size: .7rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .admin-table-card th, .admin-table-card td { padding: 15px 18px; }
 .registrant-cell { display: grid; min-width: 260px; }
@@ -412,6 +438,10 @@ button { cursor: pointer; }
 .code-chip { padding: 6px 8px; background: #f0ece5; font-family: "Courier New", monospace; font-size: .78rem; font-weight: 800; }
 .check-column { width: 100px; text-align: center !important; }
 .check-column [data-slot="checkbox"] { width: 22px; height: 22px; margin: auto; }
+.action-column { width: 125px; text-align: right !important; }
+.remove-person-button { gap: 6px; color: #9c1720 !important; font-size: .78rem; font-weight: 800; }
+.remove-person-button:hover { background: #fff0f1 !important; }
+.remove-person-button svg { width: 16px; height: 16px; }
 .empty-list { display: grid; justify-items: center; padding: 74px 20px; color: #716a61; text-align: center; }
 .empty-list svg { width: 40px; height: 40px; margin-bottom: 12px; }
 .empty-list h3 { margin: 0; color: #292623; }
@@ -469,7 +499,12 @@ button { cursor: pointer; }
   .admin-title { align-items: flex-start; flex-direction: column; }
   .stats-grid { grid-template-columns: 1fr; }
   .table-toolbar { align-items: stretch; flex-direction: column; }
+  .table-toolbar-actions { align-items: stretch; flex-direction: column; width: 100%; }
   .search-box { width: 100%; }
+  .add-person-button { width: 100%; }
+  .add-person-fields { grid-template-columns: 1fr; }
+  .add-person-actions { align-items: stretch; flex-direction: column; }
+  .add-person-actions button { width: 100%; }
   .admin-header button span:not(.mini-mark) { display: none; }
 }
 
