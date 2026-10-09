@@ -235,6 +235,34 @@ button { cursor: pointer; }
 
 .header-date { font-size: .78rem; font-weight: 900; letter-spacing: .16em; }
 
+.availability-shell { background: #151310; color: #fff; }
+.availability-shell .inner-header { background: #151310; color: #fff; border-bottom-color: rgba(255,255,255,.13); }
+.availability-shell .mini-brand { color: #fff; }
+.availability-card {
+  width: min(720px, calc(100% - 36px));
+  min-height: calc(100svh - 76px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  padding: 64px 0;
+  text-align: center;
+}
+.availability-card h1 { max-width: 680px; margin: 0 0 16px; font-family: Impact, "Arial Black", sans-serif; font-size: clamp(3.6rem, 9vw, 7.2rem); line-height: .88; letter-spacing: -.04em; text-transform: uppercase; }
+.availability-card > p:not(.eyebrow) { max-width: 590px; margin: 0; color: #c8c0b5; font-size: 1.04rem; }
+.availability-icon { width: 66px; height: 66px; display: grid; place-content: center; margin-bottom: 24px; border: 1px solid rgba(255,255,255,.24); border-radius: 50%; color: #fff; }
+.availability-icon svg { width: 30px; height: 30px; }
+.availability-card.early-bird .availability-icon { background: #d00d18; border-color: #d00d18; }
+.availability-card.closed .availability-icon { background: #312d28; }
+.gate-price { display: grid; gap: 2px; min-width: 250px; margin: 30px 0 22px; padding: 18px 28px; border: 1px solid rgba(255,255,255,.22); background: #201d19; }
+.gate-price span, .capacity-meter span { color: #f06a72; font-size: .68rem; font-weight: 900; letter-spacing: .15em; }
+.gate-price strong { font-size: 3rem; line-height: 1; }
+.gate-price small { color: #bcb4aa; }
+.gate-button { margin-left: 0; padding-inline: 24px; min-height: 50px; }
+.capacity-meter { display: grid; gap: 3px; margin: 30px 0 8px; padding: 16px 24px; border: 1px solid rgba(255,255,255,.2); }
+.capacity-meter strong { font-size: 1.5rem; }
+
 .registration-layout {
   min-height: calc(100svh - 76px);
   display: grid;
@@ -316,6 +344,10 @@ button { cursor: pointer; }
 .payment-layout { display: grid; grid-template-columns: minmax(240px, .88fr) 1.12fr; gap: 34px; align-items: center; }
 .qr-card { padding: 18px; border: 1px solid #ded8ce; background: #fff; box-shadow: 0 22px 50px rgba(20,18,15,.11); }
 .qr-card img { width: 100%; display: block; }
+.ticket-price { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 0 12px; margin-bottom: 14px; padding: 14px 16px; background: #171513; color: #fff; }
+.ticket-price span { grid-column: 1; color: #ff737a; font-size: .68rem; font-weight: 900; letter-spacing: .14em; }
+.ticket-price strong { grid-column: 2; grid-row: 1 / span 2; font-size: 2.6rem; line-height: 1; }
+.ticket-price small { grid-column: 1; color: #d7d0c6; font-size: .76rem; }
 .secure-pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; background: #eaf8ee; color: #176b35; font-size: .7rem; font-weight: 900; letter-spacing: .08em; }
 .secure-pill svg { width: 15px; height: 15px; }
 .payment-copy h3, .proof-panel h3 { margin: 17px 0 10px; font-size: 2rem; letter-spacing: -.035em; }
@@ -408,6 +440,17 @@ button { cursor: pointer; }
 .stats-grid > div:nth-child(2) { border-top-color: #d00d18; }
 .stats-grid > div:nth-child(3) { border-top-color: #26824d; }
 
+.capacity-control { display: flex; align-items: center; justify-content: space-between; gap: 28px; margin-bottom: 18px; padding: 22px; border: 1px solid #d8d1c7; border-left: 5px solid #26824d; background: #fff; }
+.capacity-control.paused { border-left-color: #d00d18; }
+.capacity-kicker { color: #756f66; font-size: .67rem; font-weight: 900; letter-spacing: .13em; }
+.capacity-control h2 { margin: 3px 0 4px; font-size: 1.35rem; }
+.capacity-control p { margin: 0; color: #70695f; font-size: .86rem; }
+.capacity-toggle { min-width: 330px; display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid #ddd6cd; background: #faf8f4; cursor: pointer; }
+.capacity-toggle [data-slot="checkbox"] { width: 22px; height: 22px; flex: 0 0 auto; }
+.capacity-toggle span { display: grid; }
+.capacity-toggle strong { font-size: .86rem; }
+.capacity-toggle small { color: #746e65; font-size: .75rem; }
+
 .admin-table-card { border: 1px solid #d8d1c7; background: #fff; }
 .table-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 22px; border-bottom: 1px solid #dfd8ce; }
 .table-toolbar h2 { margin: 0; font-size: 1.35rem; }
@@ -475,6 +518,8 @@ button { cursor: pointer; }
   .date-stamp { right: 18px; top: 18px; width: 68px; height: 82px; }
   .date-stamp span { font-size: 2.3rem; }
   .inner-header, .admin-header { height: 66px; padding-inline: 16px; }
+  .availability-card { min-height: calc(100svh - 66px); padding-block: 48px; }
+  .availability-card h1 { font-size: clamp(3.2rem, 17vw, 5rem); }
   .mini-brand > span:last-child { font-size: .68rem; }
   .registration-layout { min-height: calc(100svh - 66px); }
   .registration-aside { min-height: 280px; padding: 42px 24px; }
@@ -499,6 +544,8 @@ button { cursor: pointer; }
   .admin-content { width: min(100% - 24px, 1320px); padding-top: 34px; }
   .admin-title { align-items: flex-start; flex-direction: column; }
   .stats-grid { grid-template-columns: 1fr; }
+  .capacity-control { align-items: stretch; flex-direction: column; }
+  .capacity-toggle { min-width: 0; width: 100%; }
   .table-toolbar { align-items: stretch; flex-direction: column; }
   .table-toolbar-actions { align-items: stretch; flex-direction: column; width: 100%; }
   .search-box { width: 100%; }

@@ -1,6 +1,8 @@
 import {
+  CAPACITY_LIMIT,
   createTenDigitCode,
   getDatabase,
+  getRegistrationStatus,
   normalizeEmail,
   normalizePhone,
   storageError,
@@ -72,22 +74,66 @@ export async function POST(request: Request) {
     }
 
     const registrationId = crypto.randomUUID();
+    const partySize = 1 + companions.length;
+    const companionJson = JSON.stringify(
+      companions.map((person) => ({
+        id: crypto.randomUUID(),
+        full_name: person.fullName!.trim(),
+        phone: person.phone?.trim() || null,
+      })),
+    );
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const code = createTenDigitCode();
       try {
-        await sql.transaction((tx) => [
-          tx`INSERT INTO registrations (
-            id, code, client_registration_id, full_name, phone, email,
-            normalized_phone, normalized_email, companion_count, payment_confirmation_sent
-          ) VALUES (
-            ${registrationId}, ${code}, ${clientRegistrationId}, ${fullName}, ${phone}, ${email},
-            ${normalizedPhone}, ${normalizedEmail}, ${companions.length}, TRUE
-          )`,
-          ...companions.map((person) =>
-            tx`INSERT INTO companions (id, registration_id, full_name, phone)
-              VALUES (${crypto.randomUUID()}, ${registrationId}, ${person.fullName!.trim()}, ${person.phone?.trim() || null})`,
+        const created = await sql`
+          WITH capacity_lock AS MATERIALIZED (
+            SELECT pg_advisory_xact_lock(676735)
           ),
-        ]);
+          settings AS MATERIALIZED (
+            SELECT allow_over_capacity
+            FROM event_settings, capacity_lock
+            WHERE id = 1
+          ),
+          attendance AS MATERIALIZED (
+            SELECT COALESCE(SUM(1 + companion_count), 0)::int AS participant_count
+            FROM registrations, capacity_lock
+          ),
+          inserted_registration AS (
+            INSERT INTO registrations (
+              id, code, client_registration_id, full_name, phone, email,
+              normalized_phone, normalized_email, companion_count, payment_confirmation_sent
+            )
+            SELECT
+              ${registrationId}, ${code}, ${clientRegistrationId}, ${fullName}, ${phone}, ${email},
+              ${normalizedPhone}, ${normalizedEmail}, ${companions.length}, TRUE
+            FROM settings, attendance
+            WHERE settings.allow_over_capacity
+               OR attendance.participant_count + ${partySize} <= ${CAPACITY_LIMIT}
+            RETURNING id, code
+          ),
+          inserted_companions AS (
+            INSERT INTO companions (id, registration_id, full_name, phone)
+            SELECT guest.id, inserted_registration.id, guest.full_name, guest.phone
+            FROM inserted_registration
+            CROSS JOIN jsonb_to_recordset(${companionJson}::jsonb)
+              AS guest(id text, full_name text, phone text)
+            RETURNING id
+          )
+          SELECT code FROM inserted_registration
+        `;
+        if (!created[0]) {
+          const status = await getRegistrationStatus();
+          return Response.json(
+            {
+              error: status.capacityReached
+                ? "Registration is currently paused because all 35 participant spots are filled."
+                : `Only ${Math.max(0, status.capacityLimit - status.participantCount)} participant spots remain. Please reduce the number of accompanying guests.`,
+              code: "CAPACITY_REACHED",
+              status,
+            },
+            { status: 409 },
+          );
+        }
         return Response.json({ code }, { status: 201 });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

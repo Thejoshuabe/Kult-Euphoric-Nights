@@ -60,12 +60,30 @@ type AdminCompanion = {
   phone: string | null;
 };
 
+type RegistrationStatus = {
+  participantCount: number;
+  capacityLimit: number;
+  earlyBirdLimit: number;
+  earlyBirdSoldOut: boolean;
+  capacityReached: boolean;
+  allowOverCapacity: boolean;
+  registrationOpen: boolean;
+};
+
 const EVENT = {
   date: "24 October",
   time: "4 PM – 10 PM",
   place: "Talk of the Town Restaurant, Edappally",
   dress: "Come as your version of the night.",
+  ticketPrice: 599,
 };
+
+async function fetchRegistrationStatus() {
+  const response = await fetch("/api/registration-status", { cache: "no-store" });
+  const data = (await response.json()) as RegistrationStatus & { error?: string };
+  if (!response.ok) throw new Error(data.error || "Could not check registration availability.");
+  return data;
+}
 
 function screenFromHash(): Screen {
   if (typeof window === "undefined") return "home";
@@ -149,10 +167,13 @@ export function KultRegistrationApp() {
   }, []);
 
   useEffect(() => {
-    setScreen(screenFromHash());
+    const initialSync = window.setTimeout(() => setScreen(screenFromHash()), 0);
     const onHashChange = () => setScreen(screenFromHash());
     window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    return () => {
+      window.clearTimeout(initialSync);
+      window.removeEventListener("hashchange", onHashChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -261,6 +282,60 @@ function HomePage({ onOpen }: { onOpen: (screen: Screen) => void }) {
   );
 }
 
+function RegistrationGate({
+  kind,
+  status,
+  onHome,
+  onContinue,
+  onRetry,
+}: {
+  kind: "loading" | "early-bird" | "closed" | "error";
+  status?: RegistrationStatus | null;
+  onHome: () => void;
+  onContinue?: () => void;
+  onRetry?: () => void;
+}) {
+  return (
+    <main className="inner-shell availability-shell">
+      <InnerHeader onHome={onHome} />
+      <section className={`availability-card ${kind}`}>
+        {kind === "loading" && (
+          <><LoaderCircle className="spin availability-icon" /><p className="eyebrow">CHECKING AVAILABILITY</p><h1>Just a moment.</h1><p>We’re checking the live participant count.</p></>
+        )}
+        {kind === "early-bird" && (
+          <>
+            <div className="availability-icon"><CheckCircle2 /></div>
+            <p className="eyebrow">TICKET UPDATE</p>
+            <h1>Early birds are sold out.</h1>
+            <p>The first {status?.earlyBirdLimit ?? 5} participant spots have been claimed. General admission is still open.</p>
+            <div className="gate-price"><span>GENERAL ADMISSION</span><strong>₹{EVENT.ticketPrice}</strong><small>per participant</small></div>
+            <Button className="next-button gate-button" onClick={onContinue}>Continue with ₹{EVENT.ticketPrice} ticket</Button>
+          </>
+        )}
+        {kind === "closed" && (
+          <>
+            <div className="availability-icon"><Users /></div>
+            <p className="eyebrow">REGISTRATION PAUSED</p>
+            <h1>Early birds are sold out.</h1>
+            <p>All {status?.capacityLimit ?? 35} early-bird participant spots are filled, so registration is paused for now. If the organizers release more spots, this page will reopen automatically.</p>
+            <div className="capacity-meter"><span>PARTICIPANTS</span><strong>{status?.participantCount ?? 35} / {status?.capacityLimit ?? 35}</strong></div>
+          </>
+        )}
+        {kind === "error" && (
+          <>
+            <div className="availability-icon"><XCircle /></div>
+            <p className="eyebrow">AVAILABILITY CHECK</p>
+            <h1>We couldn’t check the list.</h1>
+            <p>Please retry before starting payment so your place can be confirmed safely.</p>
+            <Button className="next-button gate-button" onClick={onRetry}>Try again</Button>
+          </>
+        )}
+        {kind !== "loading" && <button className="text-back" onClick={onHome}><ArrowLeft /> Back to event page</button>}
+      </section>
+    </main>
+  );
+}
+
 function RegistrationFlow({ onHome }: { onHome: () => void }) {
   const [step, setStep] = useState(1);
   const [fullName, setFullName] = useState("");
@@ -274,29 +349,53 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
+  const [checkingAvailability, setCheckingAvailability] = useState(true);
+  const [availabilityError, setAvailabilityError] = useState(false);
+  const [earlyBirdAcknowledged, setEarlyBirdAcknowledged] = useState(false);
+
+  const loadAvailability = useCallback(async () => {
+    setCheckingAvailability(true);
+    setAvailabilityError(false);
+    try {
+      setRegistrationStatus(await fetchRegistrationStatus());
+    } catch {
+      setAvailabilityError(true);
+    } finally {
+      setCheckingAvailability(false);
+    }
+  }, []);
 
   useEffect(() => {
-    setClientRegistrationId(crypto.randomUUID());
-    const saved = sessionStorage.getItem("kult-registration-draft");
-    if (!saved) return;
-    try {
-      const draft = JSON.parse(saved) as {
-        fullName?: string;
-        phone?: string;
-        email?: string;
-        companionCount?: number;
-        companions?: Companion[];
-        clientRegistrationId?: string;
-      };
-      setFullName(draft.fullName ?? "");
-      setPhone(draft.phone ?? "");
-      setEmail(draft.email ?? "");
-      setCompanionCount(draft.companionCount ?? 0);
-      setCompanions(draft.companions ?? []);
-      if (draft.clientRegistrationId) setClientRegistrationId(draft.clientRegistrationId);
-    } catch {
-      sessionStorage.removeItem("kult-registration-draft");
-    }
+    const availabilityCheck = window.setTimeout(() => void loadAvailability(), 0);
+    return () => window.clearTimeout(availabilityCheck);
+  }, [loadAvailability]);
+
+  useEffect(() => {
+    const restoreDraft = window.setTimeout(() => {
+      setClientRegistrationId(crypto.randomUUID());
+      const saved = sessionStorage.getItem("kult-registration-draft");
+      if (!saved) return;
+      try {
+        const draft = JSON.parse(saved) as {
+          fullName?: string;
+          phone?: string;
+          email?: string;
+          companionCount?: number;
+          companions?: Companion[];
+          clientRegistrationId?: string;
+        };
+        setFullName(draft.fullName ?? "");
+        setPhone(draft.phone ?? "");
+        setEmail(draft.email ?? "");
+        setCompanionCount(draft.companionCount ?? 0);
+        setCompanions(draft.companions ?? []);
+        if (draft.clientRegistrationId) setClientRegistrationId(draft.clientRegistrationId);
+      } catch {
+        sessionStorage.removeItem("kult-registration-draft");
+      }
+    }, 0);
+    return () => window.clearTimeout(restoreDraft);
   }, []);
 
   useEffect(() => {
@@ -315,6 +414,25 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
     return "";
   }
 
+  async function continueToPayment() {
+    setError("");
+    try {
+      const latest = await fetchRegistrationStatus();
+      setRegistrationStatus(latest);
+      const partySize = 1 + companionCount;
+      const remaining = Math.max(0, latest.capacityLimit - latest.participantCount);
+      if (!latest.registrationOpen) return;
+      if (!latest.allowOverCapacity && partySize > remaining) {
+        setError(`Only ${remaining} participant ${remaining === 1 ? "spot remains" : "spots remain"}. Please reduce the number of accompanying guests.`);
+        return;
+      }
+      if (latest.earlyBirdSoldOut && !earlyBirdAcknowledged) return;
+      setStep(3);
+    } catch {
+      setError("Could not confirm the remaining spots. Please try again before paying.");
+    }
+  }
+
   function nextFromContact() {
     const message = validateContact();
     if (message) return setError(message);
@@ -322,7 +440,8 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
     setCompanions((current) =>
       Array.from({ length: companionCount }, (_, index) => current[index] ?? { fullName: "", phone: "" }),
     );
-    setStep(companionCount > 0 ? 2 : 3);
+    if (companionCount > 0) setStep(2);
+    else void continueToPayment();
   }
 
   function nextFromCompanions() {
@@ -330,7 +449,7 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
       return setError("Please enter the name of every accompanying guest.");
     }
     setError("");
-    setStep(3);
+    void continueToPayment();
   }
 
   async function submitRegistration() {
@@ -352,7 +471,8 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
           paymentConfirmationSent: true,
         }),
       });
-      const data = (await response.json()) as { code?: string; error?: string };
+      const data = (await response.json()) as { code?: string; error?: string; status?: RegistrationStatus };
+      if (data.status) setRegistrationStatus(data.status);
       if (!response.ok || !data.code) throw new Error(data.error || "Registration could not be completed.");
       setRegistrationCode(data.code);
       sessionStorage.removeItem("kult-registration-draft");
@@ -368,6 +488,13 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
     await navigator.clipboard.writeText(registrationCode);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  if (checkingAvailability) return <RegistrationGate kind="loading" onHome={onHome} />;
+  if (availabilityError || !registrationStatus) return <RegistrationGate kind="error" onHome={onHome} onRetry={() => void loadAvailability()} />;
+  if (!registrationStatus.registrationOpen && step < 5) return <RegistrationGate kind="closed" status={registrationStatus} onHome={onHome} />;
+  if (registrationStatus.earlyBirdSoldOut && !earlyBirdAcknowledged && step < 5) {
+    return <RegistrationGate kind="early-bird" status={registrationStatus} onHome={onHome} onContinue={() => setEarlyBirdAcknowledged(true)} />;
   }
 
   const progress = Math.min(step, 4) * 25;
@@ -416,9 +543,9 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
                   <Input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
                 </Field>
               </div>
-              <Field label="How many people are you bringing?" htmlFor="guest-count" hint="Do not count yourself. Maximum 8 accompanying guests.">
+              <Field label="How many people are you bringing?" htmlFor="guest-count" hint={`Do not count yourself. ${registrationStatus.allowOverCapacity ? "Maximum 8 accompanying guests." : `${Math.max(0, registrationStatus.capacityLimit - registrationStatus.participantCount)} total participant spots currently remain.`}`}>
                 <select id="guest-count" value={companionCount} onChange={(event) => setCompanionCount(Number(event.target.value))}>
-                  {Array.from({ length: 9 }, (_, count) => <option key={count} value={count}>{count === 0 ? "Just me" : `${count} ${count === 1 ? "guest" : "guests"}`}</option>)}
+                  {Array.from({ length: Math.min(8, registrationStatus.allowOverCapacity ? 8 : Math.max(0, registrationStatus.capacityLimit - registrationStatus.participantCount - 1)) + 1 }, (_, count) => <option key={count} value={count}>{count === 0 ? "Just me" : `${count} ${count === 1 ? "guest" : "guests"}`}</option>)}
                 </select>
               </Field>
             </div>
@@ -445,18 +572,19 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
           {step === 3 && (
             <div className="payment-layout">
               <div className="qr-card">
-                <img src="/payment-qr.png" alt="UPI payment QR code for Irfan, UPI ID irfanmnh48@oksbi" />
+                <div className="ticket-price"><span>TICKET PRICE</span><strong>₹{EVENT.ticketPrice}</strong><small>per participant · Group total ₹{EVENT.ticketPrice * (1 + companionCount)}</small></div>
+                <img src="/gpay-qr.jpg" alt="Google Pay QR code for Shreyaan Sreenivas, UPI ID shreyaansreenivas5@okaxis" />
               </div>
               <div className="payment-copy">
                 <span className="secure-pill"><ShieldCheck /> UPI PAYMENT</span>
                 <h3>Pay in 3 clear steps</h3>
                 <ol className="payment-steps">
                   <li><span>1</span><div><strong>Open your UPI app</strong><p>Use Google Pay, PhonePe, Paytm, or any UPI app.</p></div></li>
-                  <li><span>2</span><div><strong>Scan this QR and pay</strong><p>Pay the event amount you were given, then wait for the payment to complete.</p></div></li>
+                  <li><span>2</span><div><strong>Scan this QR and pay</strong><p>Pay ₹{EVENT.ticketPrice} per participant. Your group total is ₹{EVENT.ticketPrice * (1 + companionCount)}.</p></div></li>
                   <li><span>3</span><div><strong>Save your payment proof</strong><p>Take a clear screenshot of the successful payment screen.</p></div></li>
                 </ol>
-                <div className="upi-id"><span>UPI ID</span><strong>irfanmnh48@oksbi</strong></div>
-                <a className="download-link" href="/payment-qr.png" download="kult-events-payment-qr.png">
+                <div className="upi-id"><span>UPI ID</span><strong>shreyaansreenivas5@okaxis</strong></div>
+                <a className="download-link" href="/gpay-qr.jpg" download="kult-events-gpay-qr.jpg">
                   <Download aria-hidden="true" /> Download QR to gallery
                 </a>
                 <div className="payment-critical" role="alert">
@@ -599,6 +727,8 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
   const [newPerson, setNewPerson] = useState({ fullName: "", phone: "", email: "" });
   const [savingPerson, setSavingPerson] = useState(false);
   const [deletingId, setDeletingId] = useState("");
+  const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
+  const [savingCapacity, setSavingCapacity] = useState(false);
 
   const loadRegistrations = useCallback(async () => {
     try {
@@ -607,10 +737,11 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
         setAccess("login");
         return;
       }
-      const data = (await response.json()) as { registrations?: Registration[]; companions?: AdminCompanion[]; error?: string };
+      const data = (await response.json()) as { registrations?: Registration[]; companions?: AdminCompanion[]; status?: RegistrationStatus; error?: string };
       if (!response.ok) throw new Error(data.error || "Could not load registrations.");
       setRows(data.registrations ?? []);
       setCompanions(data.companions ?? []);
+      setRegistrationStatus(data.status ?? null);
       setAccess("dashboard");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load registrations.");
@@ -618,7 +749,10 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
     }
   }, []);
 
-  useEffect(() => { void loadRegistrations(); }, [loadRegistrations]);
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => void loadRegistrations(), 0);
+    return () => window.clearTimeout(initialLoad);
+  }, [loadRegistrations]);
 
   async function login(event: React.FormEvent) {
     event.preventDefault();
@@ -665,6 +799,34 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
     }
   }
 
+  async function toggleCapacityOverride(value: boolean) {
+    const previous = registrationStatus;
+    if (previous) {
+      setRegistrationStatus({
+        ...previous,
+        allowOverCapacity: value,
+        registrationOpen: previous.participantCount < previous.capacityLimit || value,
+      });
+    }
+    setSavingCapacity(true);
+    setError("");
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ setting: "allowOverCapacity", value }),
+      });
+      const data = (await response.json()) as { status?: RegistrationStatus; error?: string };
+      if (!response.ok) throw new Error(data.error || "Could not update registration capacity.");
+      if (data.status) setRegistrationStatus(data.status);
+    } catch (capacityError) {
+      setRegistrationStatus(previous);
+      setError(capacityError instanceof Error ? capacityError.message : "Could not update registration capacity.");
+    } finally {
+      setSavingCapacity(false);
+    }
+  }
+
   async function addPerson(event: React.FormEvent) {
     event.preventDefault();
     setSavingPerson(true);
@@ -699,8 +861,7 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error || "Could not remove registration.");
-      setRows((current) => current.filter((item) => item.id !== row.id));
-      setCompanions((current) => current.filter((item) => item.registration_id !== row.id));
+      await loadRegistrations();
     } catch (removeError) {
       setError(removeError instanceof Error ? removeError.message : "Could not remove registration.");
     } finally {
@@ -742,6 +903,7 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
   }
 
   const totalGuests = rows.reduce((total, row) => total + Number(row.companion_count), 0);
+  const participantCount = registrationStatus?.participantCount ?? rows.length + totalGuests;
   const verifiedCount = rows.filter((row) => row.verified).length;
   const arrivedCount = rows.filter((row) => row.arrived).length;
 
@@ -754,9 +916,20 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
       <section className="admin-content">
         <div className="admin-title"><div><p className="eyebrow">DOOR LIST · 24 OCTOBER</p><h1>Registration control</h1></div><span>Live organizer view</span></div>
         <div className="stats-grid">
-          <div><span>REGISTRATIONS</span><strong>{rows.length}</strong><small>{rows.length + totalGuests} people including guests</small></div>
+          <div><span>PARTICIPANTS</span><strong>{participantCount}</strong><small>{rows.length} registrations including groups</small></div>
           <div><span>VERIFIED</span><strong>{verifiedCount}</strong><small>{rows.length - verifiedCount} awaiting payment check</small></div>
           <div><span>ARRIVED</span><strong>{arrivedCount}</strong><small>{Math.max(0, verifiedCount - arrivedCount)} verified not checked in</small></div>
+        </div>
+        <div className={`capacity-control ${registrationStatus?.registrationOpen ? "open" : "paused"}`}>
+          <div>
+            <span className="capacity-kicker">REGISTRATION CAPACITY</span>
+            <h2>{registrationStatus?.registrationOpen ? "Registration is open" : "Registration is paused"}</h2>
+            <p>The public form automatically pauses at {registrationStatus?.capacityLimit ?? 35} participants. Current attendance: <strong>{participantCount} / {registrationStatus?.capacityLimit ?? 35}</strong>.</p>
+          </div>
+          <label className="capacity-toggle">
+            <Checkbox checked={Boolean(registrationStatus?.allowOverCapacity)} disabled={savingCapacity} onCheckedChange={(checked) => void toggleCapacityOverride(checked === true)} />
+            <span><strong>Allow registrations beyond 35</strong><small>Turn this on to reopen the public form after it reaches capacity.</small></span>
+          </label>
         </div>
         <div className="admin-table-card">
           <div className="table-toolbar">

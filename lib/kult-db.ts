@@ -49,6 +49,14 @@ export async function ensureSchema() {
           attempt_count SMALLINT NOT NULL DEFAULT 0,
           window_start BIGINT NOT NULL
         )`,
+        sql`CREATE TABLE IF NOT EXISTS event_settings (
+          id SMALLINT PRIMARY KEY CHECK (id = 1),
+          allow_over_capacity BOOLEAN NOT NULL DEFAULT FALSE,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`,
+        sql`INSERT INTO event_settings (id, allow_over_capacity)
+            VALUES (1, FALSE)
+            ON CONFLICT (id) DO NOTHING`,
       ])
       .then(() => undefined)
       .catch((error) => {

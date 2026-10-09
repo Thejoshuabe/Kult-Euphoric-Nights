@@ -1,6 +1,8 @@
 import {
+  CAPACITY_LIMIT,
   createTenDigitCode,
   getDatabase,
+  getRegistrationStatus,
   normalizeEmail,
   normalizePhone,
   requireAdmin,
@@ -21,7 +23,8 @@ export async function GET(request: Request) {
       ],
       { readOnly: true },
     );
-    return Response.json({ registrations, companions });
+    const status = await getRegistrationStatus();
+    return Response.json({ registrations, companions, status });
   } catch (error) {
     return storageError(error);
   }
@@ -36,7 +39,17 @@ export async function PATCH(request: Request) {
       id?: string;
       field?: "verified" | "arrived";
       value?: boolean;
+      setting?: "allowOverCapacity";
     };
+    if (payload.setting === "allowOverCapacity" && typeof payload.value === "boolean") {
+      const sql = await getDatabase();
+      await sql`
+        UPDATE event_settings
+        SET allow_over_capacity = ${payload.value}, updated_at = NOW()
+        WHERE id = 1
+      `;
+      return Response.json({ ok: true, status: await getRegistrationStatus() });
+    }
     if (!payload.id || !["verified", "arrived"].includes(payload.field ?? "") || typeof payload.value !== "boolean") {
       return Response.json({ error: "Invalid update." }, { status: 400 });
     }
@@ -94,15 +107,37 @@ export async function POST(request: Request) {
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const code = createTenDigitCode();
       try {
-        await sql`
+        const inserted = await sql`
+          WITH capacity_lock AS MATERIALIZED (
+            SELECT pg_advisory_xact_lock(676735)
+          ),
+          settings AS MATERIALIZED (
+            SELECT allow_over_capacity
+            FROM event_settings, capacity_lock
+            WHERE id = 1
+          ),
+          attendance AS MATERIALIZED (
+            SELECT COALESCE(SUM(1 + companion_count), 0)::int AS participant_count
+            FROM registrations, capacity_lock
+          )
           INSERT INTO registrations (
             id, code, client_registration_id, full_name, phone, email,
             normalized_phone, normalized_email, companion_count, payment_confirmation_sent
-          ) VALUES (
+          )
+          SELECT
             ${registrationId}, ${code}, ${clientRegistrationId}, ${fullName}, ${phone}, ${email},
             ${normalizedPhone}, ${normalizedEmail}, 0, TRUE
-          )
+          FROM settings, attendance
+          WHERE settings.allow_over_capacity
+             OR attendance.participant_count + 1 <= ${CAPACITY_LIMIT}
+          RETURNING id
         `;
+        if (!inserted[0]) {
+          return Response.json(
+            { error: "The 35-participant limit has been reached. Enable additional registrations first." },
+            { status: 409 },
+          );
+        }
         const created = await sql`
           SELECT id, code, full_name, phone, email, companion_count, verified, arrived, created_at
           FROM registrations WHERE id = ${registrationId} LIMIT 1
