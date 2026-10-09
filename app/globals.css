@@ -393,13 +393,22 @@ button { cursor: pointer; }
 .dress-card span { color: #d00d18; font-size: .67rem; font-weight: 900; letter-spacing: .13em; }
 .dress-card strong { font-size: 1rem; }
 .pending-note { margin: 18px 0; padding: 12px; background: #fff5dd; color: #6b511a; font-size: .86rem; }
+.verification-reminder { display: grid; gap: 6px; margin: 0 auto 22px; padding: 20px; border: 1px solid #ddd6cd; background: #faf8f4; text-align: left; }
+.verification-reminder span { color: #d00d18; font-size: .68rem; font-weight: 900; letter-spacing: .13em; }
+.verification-reminder strong { font-size: 1.35rem; }
+.verification-reminder p { margin: 0; color: #686158; }
+.success-actions { display: flex; justify-content: center; gap: 10px; }
+.success-actions button:first-child { background: #d00d18; color: #fff; }
 
 .verify-shell { background: #151310; }
 .verify-shell .inner-header { background: #151310; color: #fff; border-bottom-color: rgba(255,255,255,.13); }
 .verify-shell .mini-brand { color: #fff; }
-.verify-card { width: min(760px, calc(100% - 32px)); margin: 0 auto; padding: clamp(60px, 10vh, 110px) 0; color: #fff; text-align: center; }
+.verify-card { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: clamp(60px, 10vh, 110px) 0; color: #fff; text-align: center; }
 .verify-card h1 { margin: 0 0 14px; font-size: clamp(2.8rem, 7vw, 5.8rem); line-height: .92; letter-spacing: -.055em; }
 .verify-card > p:not(.eyebrow) { margin: 0; color: #bdb6ab; }
+.verify-fields { width: min(660px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 38px auto 22px; text-align: left; }
+.verify-fields .field-group label { color: #e8e1d8; }
+.verify-fields .field-group input { border-color: #57524a; background: #211e1a; color: #fff; }
 .otp-wrap { display: flex; justify-content: center; margin: 42px 0 24px; }
 .otp-wrap [data-slot="input-otp"] { justify-content: center; }
 .otp-slot { width: clamp(30px, 7vw, 50px) !important; height: 58px !important; border-color: #57524a !important; background: #211e1a !important; color: #fff; font-family: "Courier New", monospace; font-size: 1.3rem !important; }
@@ -412,6 +421,24 @@ button { cursor: pointer; }
 .status-card.verified { border-color: #267644; background: #173522; color: #d7fbe3; }
 .status-card.pending { border-color: #8a6b28; background: #372e1b; color: #fff1c5; }
 .status-card.not-found { border-color: #8a363d; background: #3a1c1f; color: #ffd8dc; }
+.ticket-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 30px; text-align: left; }
+.event-ticket { overflow: hidden; border: 1px solid #575149; background: #f7f3eb; color: #171513; box-shadow: 0 22px 50px rgba(0,0,0,.22); }
+.event-ticket.disabled { opacity: .68; }
+.ticket-header { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; background: #d00d18; color: #fff; font-size: .7rem; font-weight: 900; letter-spacing: .13em; }
+.ticket-header strong { font-size: 1rem; }
+.ticket-body { display: grid; grid-template-columns: 1fr 150px; gap: 16px; align-items: center; padding: 18px; }
+.ticket-body p { margin: 0 0 6px; color: #d00d18; font-size: .67rem; font-weight: 900; letter-spacing: .14em; }
+.ticket-body h3 { margin: 0 0 8px; font-size: 1.45rem; line-height: 1.05; }
+.ticket-body small { color: #6f675e; }
+.ticket-body img { width: 150px; height: 150px; display: block; border: 6px solid #fff; }
+.ticket-disabled-mark { width: 150px; height: 150px; display: grid; place-content: center; justify-items: center; gap: 6px; border: 2px dashed #a9a096; color: #7d756b; }
+.ticket-disabled-mark svg { width: 34px; }
+.ticket-disabled-mark span { font-size: .7rem; font-weight: 900; letter-spacing: .12em; }
+.ticket-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px dashed #cfc6ba; font-size: .75rem; font-weight: 800; }
+.ticket-footer a { display: inline-flex; align-items: center; gap: 6px; color: #b80d16; text-decoration: none; }
+.ticket-footer a svg { width: 15px; }
+.ticket-ready { color: #176b35; }
+.ticket-used { color: #7b5d1e; }
 .text-back { display: inline-flex; align-items: center; gap: 7px; margin-top: 34px; border: 0; background: none; color: inherit; opacity: .7; }
 .text-back:hover { opacity: 1; }
 .text-back svg { width: 16px; }
@@ -451,6 +478,24 @@ button { cursor: pointer; }
 .capacity-toggle strong { font-size: .86rem; }
 .capacity-toggle small { color: #746e65; font-size: .75rem; }
 
+.scanner-control { display: flex; align-items: center; justify-content: space-between; gap: 26px; margin-bottom: 18px; padding: 22px; border: 1px solid #d8d1c7; background: #171513; color: #fff; }
+.scanner-control h2 { margin: 3px 0 4px; font-size: 1.35rem; }
+.scanner-control p { margin: 0; color: #bdb6ab; font-size: .86rem; }
+.scanner-button { min-height: 46px; white-space: nowrap; background: #d00d18 !important; font-weight: 900; }
+.scanner-panel { margin: -1px 0 18px; padding: 22px; border: 1px solid #d8d1c7; background: #fff; }
+.scanner-panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 18px; }
+.scanner-panel-head span { color: #d00d18; font-size: .68rem; font-weight: 900; letter-spacing: .13em; }
+.scanner-panel-head h2 { margin: 2px 0 0; }
+.ticket-reader { width: min(620px, 100%); min-height: 280px; margin: 0 auto; overflow: hidden; background: #12110f; }
+.ticket-reader video { object-fit: cover; }
+.scanner-result { width: min(620px, 100%); display: flex; gap: 12px; margin: 14px auto 0; padding: 14px; background: #f1eee8; color: #4e4943; }
+.scanner-result svg { width: 24px; height: 24px; flex: 0 0 auto; }
+.scanner-result strong { display: block; }
+.scanner-result p { margin: 2px 0 0; font-size: .84rem; }
+.scanner-result.success { background: #eaf8ee; color: #176b35; }
+.scanner-result.error { background: #fff0f1; color: #8f151d; }
+.scanner-next { display: flex; margin: 14px auto 0; background: #171513 !important; }
+
 .admin-table-card { border: 1px solid #d8d1c7; background: #fff; }
 .table-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 22px; border-bottom: 1px solid #dfd8ce; }
 .table-toolbar h2 { margin: 0; font-size: 1.35rem; }
@@ -486,6 +531,13 @@ button { cursor: pointer; }
 .remove-person-button { gap: 6px; color: #9c1720 !important; font-size: .78rem; font-weight: 800; }
 .remove-person-button:hover { background: #fff0f1 !important; }
 .remove-person-button svg { width: 16px; height: 16px; }
+.admin-ticket-list { min-width: 360px; display: grid; gap: 7px; }
+.admin-ticket-row { display: grid; grid-template-columns: minmax(150px, 1fr) auto auto; align-items: center; gap: 12px; padding: 9px 10px; border: 1px solid #e0dad1; background: #faf8f4; }
+.admin-ticket-row.disabled { opacity: .65; }
+.admin-ticket-row > div { display: grid; }
+.admin-ticket-row > div strong { font-size: .8rem; }
+.admin-ticket-row > div small { color: #777066; }
+.admin-ticket-row label { display: flex; align-items: center; gap: 6px; color: #625b53; font-size: .72rem; font-weight: 800; }
 .empty-list { display: grid; justify-items: center; padding: 74px 20px; color: #716a61; text-align: center; }
 .empty-list svg { width: 40px; height: 40px; margin-bottom: 12px; }
 .empty-list h3 { margin: 0; color: #292623; }
@@ -537,6 +589,9 @@ button { cursor: pointer; }
   .registration-code { font-size: 1.85rem; gap: 7px; }
   .registration-code svg { width: 18px; }
   .verify-card { padding-top: 60px; }
+  .verify-fields, .ticket-grid { grid-template-columns: 1fr; }
+  .ticket-body { grid-template-columns: 1fr 124px; }
+  .ticket-body img, .ticket-disabled-mark { width: 124px; height: 124px; }
   .otp-wrap [data-slot="input-otp"] { gap: 4px; }
   .otp-slot { width: 30px !important; height: 50px !important; }
   .otp-gap { display: none; }
@@ -546,6 +601,9 @@ button { cursor: pointer; }
   .stats-grid { grid-template-columns: 1fr; }
   .capacity-control { align-items: stretch; flex-direction: column; }
   .capacity-toggle { min-width: 0; width: 100%; }
+  .scanner-control { align-items: stretch; flex-direction: column; }
+  .scanner-button { width: 100%; }
+  .success-actions { align-items: stretch; flex-direction: column; }
   .table-toolbar { align-items: stretch; flex-direction: column; }
   .table-toolbar-actions { align-items: stretch; flex-direction: column; width: 100%; }
   .search-box { width: 100%; }

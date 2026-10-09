@@ -21,6 +21,10 @@ export function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
+export function normalizeName(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 export function createTenDigitCode() {
   const values = crypto.getRandomValues(new Uint8Array(10));
   return `${(values[0] % 9) + 1}${Array.from(values.slice(1), (n) => n % 10).join("")}`;

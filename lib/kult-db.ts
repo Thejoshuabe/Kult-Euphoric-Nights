@@ -38,6 +38,38 @@ export async function ensureSchema() {
           phone TEXT
         )`,
         sql`CREATE INDEX IF NOT EXISTS idx_companions_registration_id ON companions(registration_id)`,
+        sql`CREATE TABLE IF NOT EXISTS tickets (
+          id TEXT PRIMARY KEY,
+          registration_id TEXT NOT NULL REFERENCES registrations(id) ON DELETE CASCADE,
+          holder_name TEXT NOT NULL,
+          ticket_number SMALLINT NOT NULL,
+          enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          arrived BOOLEAN NOT NULL DEFAULT FALSE,
+          arrived_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (registration_id, ticket_number)
+        )`,
+        sql`CREATE INDEX IF NOT EXISTS idx_tickets_registration_id ON tickets(registration_id)`,
+        sql`INSERT INTO tickets (id, registration_id, holder_name, ticket_number)
+            SELECT 'legacy-' || md5('registrant:' || registrations.id), registrations.id, registrations.full_name, 1
+            FROM registrations
+            ON CONFLICT (registration_id, ticket_number) DO NOTHING`,
+        sql`INSERT INTO tickets (id, registration_id, holder_name, ticket_number)
+            SELECT
+              'legacy-' || md5('companion:' || ranked.id),
+              ranked.registration_id,
+              ranked.full_name,
+              ranked.ticket_number
+            FROM (
+              SELECT
+                companions.id,
+                companions.registration_id,
+                companions.full_name,
+                (ROW_NUMBER() OVER (PARTITION BY companions.registration_id ORDER BY companions.id) + 1)::smallint AS ticket_number
+              FROM companions
+            ) AS ranked
+            ON CONFLICT (registration_id, ticket_number) DO NOTHING`,
         sql`CREATE TABLE IF NOT EXISTS admin_sessions (
           token_hash TEXT PRIMARY KEY,
           expires_at BIGINT NOT NULL,

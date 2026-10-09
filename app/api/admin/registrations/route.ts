@@ -15,16 +15,18 @@ export async function GET(request: Request) {
       return Response.json({ error: "Organizer access required." }, { status: 401 });
     }
     const sql = await getDatabase();
-    const [registrations, companions] = await sql.transaction(
+    const [registrations, companions, tickets] = await sql.transaction(
       [
-        sql`SELECT id, code, full_name, phone, email, companion_count, verified, arrived, created_at
+        sql`SELECT id, full_name, phone, email, companion_count, verified, arrived, created_at
             FROM registrations ORDER BY created_at DESC`,
         sql`SELECT id, registration_id, full_name, phone FROM companions ORDER BY registration_id, full_name`,
+        sql`SELECT id, registration_id, holder_name, ticket_number, enabled, arrived
+            FROM tickets ORDER BY registration_id, ticket_number`,
       ],
       { readOnly: true },
     );
     const status = await getRegistrationStatus();
-    return Response.json({ registrations, companions, status });
+    return Response.json({ registrations, companions, tickets, status });
   } catch (error) {
     return storageError(error);
   }
@@ -40,6 +42,8 @@ export async function PATCH(request: Request) {
       field?: "verified" | "arrived";
       value?: boolean;
       setting?: "allowOverCapacity";
+      ticketId?: string;
+      ticketField?: "enabled" | "arrived";
     };
     if (payload.setting === "allowOverCapacity" && typeof payload.value === "boolean") {
       const sql = await getDatabase();
@@ -49,6 +53,22 @@ export async function PATCH(request: Request) {
         WHERE id = 1
       `;
       return Response.json({ ok: true, status: await getRegistrationStatus() });
+    }
+    if (payload.ticketId && ["enabled", "arrived"].includes(payload.ticketField ?? "") && typeof payload.value === "boolean") {
+      const sql = await getDatabase();
+      const updated = payload.ticketField === "enabled"
+        ? await sql`UPDATE tickets SET enabled = ${payload.value}, updated_at = NOW() WHERE id = ${payload.ticketId} RETURNING registration_id`
+        : await sql`UPDATE tickets SET arrived = ${payload.value}, arrived_at = ${payload.value ? new Date().toISOString() : null}, updated_at = NOW() WHERE id = ${payload.ticketId} RETURNING registration_id`;
+      if (!updated[0]) return Response.json({ error: "Ticket not found." }, { status: 404 });
+      await sql`
+        UPDATE registrations
+        SET arrived = NOT EXISTS (
+          SELECT 1 FROM tickets
+          WHERE registration_id = ${String(updated[0].registration_id)} AND enabled = TRUE AND arrived = FALSE
+        ), updated_at = NOW()
+        WHERE id = ${String(updated[0].registration_id)}
+      `;
+      return Response.json({ ok: true });
     }
     if (!payload.id || !["verified", "arrived"].includes(payload.field ?? "") || typeof payload.value !== "boolean") {
       return Response.json({ error: "Invalid update." }, { status: 400 });
@@ -104,6 +124,7 @@ export async function POST(request: Request) {
 
     const registrationId = crypto.randomUUID();
     const clientRegistrationId = `admin-${crypto.randomUUID()}`;
+    const ticketId = crypto.randomUUID();
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const code = createTenDigitCode();
       try {
@@ -119,18 +140,27 @@ export async function POST(request: Request) {
           attendance AS MATERIALIZED (
             SELECT COALESCE(SUM(1 + companion_count), 0)::int AS participant_count
             FROM registrations, capacity_lock
+          ),
+          inserted_registration AS (
+            INSERT INTO registrations (
+              id, code, client_registration_id, full_name, phone, email,
+              normalized_phone, normalized_email, companion_count, payment_confirmation_sent
+            )
+            SELECT
+              ${registrationId}, ${code}, ${clientRegistrationId}, ${fullName}, ${phone}, ${email},
+              ${normalizedPhone}, ${normalizedEmail}, 0, TRUE
+            FROM settings, attendance
+            WHERE settings.allow_over_capacity
+               OR attendance.participant_count + 1 <= ${CAPACITY_LIMIT}
+            RETURNING id
+          ),
+          inserted_ticket AS (
+            INSERT INTO tickets (id, registration_id, holder_name, ticket_number)
+            SELECT ${ticketId}, inserted_registration.id, ${fullName}, 1
+            FROM inserted_registration
+            RETURNING id
           )
-          INSERT INTO registrations (
-            id, code, client_registration_id, full_name, phone, email,
-            normalized_phone, normalized_email, companion_count, payment_confirmation_sent
-          )
-          SELECT
-            ${registrationId}, ${code}, ${clientRegistrationId}, ${fullName}, ${phone}, ${email},
-            ${normalizedPhone}, ${normalizedEmail}, 0, TRUE
-          FROM settings, attendance
-          WHERE settings.allow_over_capacity
-             OR attendance.participant_count + 1 <= ${CAPACITY_LIMIT}
-          RETURNING id
+          SELECT id FROM inserted_registration
         `;
         if (!inserted[0]) {
           return Response.json(
@@ -139,7 +169,7 @@ export async function POST(request: Request) {
           );
         }
         const created = await sql`
-          SELECT id, code, full_name, phone, email, companion_count, verified, arrived, created_at
+          SELECT id, full_name, phone, email, companion_count, verified, arrived, created_at
           FROM registrations WHERE id = ${registrationId} LIMIT 1
         `;
         return Response.json({ registration: created[0] }, { status: 201 });
@@ -152,7 +182,7 @@ export async function POST(request: Request) {
         throw error;
       }
     }
-    return Response.json({ error: "Could not create a unique registration code. Please try again." }, { status: 503 });
+    return Response.json({ error: "Could not create the registration. Please try again." }, { status: 503 });
   } catch (error) {
     return storageError(error);
   }

@@ -7,9 +7,9 @@ A mobile-first event registration and organizer check-in system for the KULT eve
 - Guided attendee and accompanying-guest registration
 - UPI QR payment screen with QR download
 - Instagram payment-proof confirmation
-- Unique 10-digit registration codes
-- Public registration-status lookup
-- Organizer-only payment verification and arrival check-in
+- Name-and-phone registration-status lookup
+- Individual scannable tickets after payment verification
+- Organizer per-ticket enable/disable controls and camera check-in scanner
 - Duplicate prevention for phone numbers, emails, and retried submissions
 - Persistent Postgres storage with secure, server-side organizer sessions
 - Organizer sign-in rate limiting against repeated code guessing

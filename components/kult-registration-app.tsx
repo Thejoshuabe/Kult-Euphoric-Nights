@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import {
   ArrowLeft,
   CalendarDays,
+  Camera,
   Check,
   CheckCircle2,
   Clock3,
-  Copy,
   Download,
   ExternalLink,
   LoaderCircle,
@@ -15,6 +16,7 @@ import {
   LogOut,
   MapPin,
   Plus,
+  QrCode,
   Search,
   ShieldCheck,
   Trash2,
@@ -25,7 +27,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -43,7 +44,6 @@ type VerifyState = "idle" | "loading" | "verified" | "pending" | "not-found" | "
 
 type Registration = {
   id: string;
-  code: string;
   full_name: string;
   phone: string;
   email: string;
@@ -58,6 +58,23 @@ type AdminCompanion = {
   registration_id: string;
   full_name: string;
   phone: string | null;
+};
+
+type Ticket = {
+  id: string;
+  holderName: string;
+  ticketNumber: number;
+  enabled: boolean;
+  arrived: boolean;
+};
+
+type AdminTicket = {
+  id: string;
+  registration_id: string;
+  holder_name: string;
+  ticket_number: number;
+  enabled: boolean;
+  arrived: boolean;
 };
 
 type RegistrationStatus = {
@@ -124,9 +141,11 @@ function InnerHeader({ onHome }: { onHome: () => void }) {
 
 export function KultRegistrationApp() {
   const [screen, setScreen] = useState<Screen>("home");
-  const [verifyCode, setVerifyCode] = useState("");
+  const [verifyName, setVerifyName] = useState("");
+  const [verifyPhone, setVerifyPhone] = useState("");
   const [verifyState, setVerifyState] = useState<VerifyState>("idle");
   const [verifyMessage, setVerifyMessage] = useState("");
+  const [verifyTickets, setVerifyTickets] = useState<Ticket[]>([]);
 
   const openScreen = useCallback((next: Screen) => {
     setScreen(next);
@@ -134,22 +153,25 @@ export function KultRegistrationApp() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  const checkVerification = useCallback(async (code: string) => {
-    if (!/^\d{10}$/.test(code)) {
+  const checkVerification = useCallback(async (fullName: string, phone: string) => {
+    if (fullName.trim().length < 2 || phone.replace(/\D/g, "").length < 7) {
       setVerifyState("error");
-      setVerifyMessage("Enter the complete 10-digit registration code.");
-      return { found: false, error: "Invalid code" };
+      setVerifyMessage("Enter the same full name and phone number used during registration.");
+      return { found: false, error: "Invalid details" };
     }
     setVerifyState("loading");
     setVerifyMessage("");
+    setVerifyTickets([]);
     try {
-      const response = await fetch(`/api/verify?code=${encodeURIComponent(code)}`, {
-        cache: "no-store",
+      const response = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName, phone }),
       });
       const data = (await response.json()) as {
         found?: boolean;
         verified?: boolean;
-        arrived?: boolean;
+        tickets?: Ticket[];
         error?: string;
       };
       if (response.status === 404 || !data.found) {
@@ -158,7 +180,8 @@ export function KultRegistrationApp() {
       }
       if (!response.ok) throw new Error(data.error || "Unable to check registration.");
       setVerifyState(data.verified ? "verified" : "pending");
-      return { found: true, verified: Boolean(data.verified), arrived: Boolean(data.arrived) };
+      setVerifyTickets(data.tickets ?? []);
+      return { found: true, verified: Boolean(data.verified), ticketCount: data.tickets?.length ?? 0 };
     } catch (error) {
       setVerifyState("error");
       setVerifyMessage(error instanceof Error ? error.message : "Unable to check registration.");
@@ -207,19 +230,25 @@ export function KultRegistrationApp() {
         {
           name: "check_registration_status",
           title: "Check KULT registration",
-          description: "Check whether a 10-digit KULT registration code has been verified.",
+          description: "Check KULT payment verification using the registered full name and phone number.",
           inputSchema: {
             type: "object",
-            properties: { code: { type: "string", pattern: "^[0-9]{10}$" } },
-            required: ["code"],
+            properties: {
+              fullName: { type: "string", minLength: 2 },
+              phone: { type: "string", minLength: 7 },
+            },
+            required: ["fullName", "phone"],
             additionalProperties: false,
           },
           annotations: { readOnlyHint: true, untrustedContentHint: false },
           execute: async (input: unknown) => {
-            const code = String((input as { code?: string })?.code ?? "");
-            setVerifyCode(code);
+            const details = input as { fullName?: string; phone?: string };
+            const fullName = String(details?.fullName ?? "");
+            const phone = String(details?.phone ?? "");
+            setVerifyName(fullName);
+            setVerifyPhone(phone);
             openScreen("verify");
-            return checkVerification(code);
+            return checkVerification(fullName, phone);
           },
         },
         { signal: lifecycle.signal },
@@ -228,15 +257,18 @@ export function KultRegistrationApp() {
     return () => lifecycle.abort();
   }, [checkVerification, openScreen]);
 
-  if (screen === "register") return <RegistrationFlow onHome={() => openScreen("home")} />;
+  if (screen === "register") return <RegistrationFlow onHome={() => openScreen("home")} onVerify={(fullName, phone) => { setVerifyName(fullName); setVerifyPhone(phone); openScreen("verify"); }} />;
   if (screen === "verify") {
     return (
       <VerifyPage
-        code={verifyCode}
-        setCode={setVerifyCode}
+        fullName={verifyName}
+        setFullName={setVerifyName}
+        phone={verifyPhone}
+        setPhone={setVerifyPhone}
         state={verifyState}
         message={verifyMessage}
-        check={() => checkVerification(verifyCode)}
+        tickets={verifyTickets}
+        check={() => checkVerification(verifyName, verifyPhone)}
         onHome={() => openScreen("home")}
       />
     );
@@ -263,7 +295,7 @@ function HomePage({ onOpen }: { onOpen: (screen: Screen) => void }) {
               Register here
             </Button>
             <Button size="lg" variant="outline" className="secondary-cta" onClick={() => onOpen("verify")}>
-              Verify registration
+              Check verification
             </Button>
           </div>
         </div>
@@ -336,7 +368,7 @@ function RegistrationGate({
   );
 }
 
-function RegistrationFlow({ onHome }: { onHome: () => void }) {
+function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: (fullName: string, phone: string) => void }) {
   const [step, setStep] = useState(1);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -345,10 +377,9 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
   const [companions, setCompanions] = useState<Companion[]>([]);
   const [sentProof, setSentProof] = useState(false);
   const [clientRegistrationId, setClientRegistrationId] = useState("");
-  const [registrationCode, setRegistrationCode] = useState("");
+  const [registrationComplete, setRegistrationComplete] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(true);
   const [availabilityError, setAvailabilityError] = useState(false);
@@ -399,12 +430,12 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
   }, []);
 
   useEffect(() => {
-    if (!clientRegistrationId || registrationCode) return;
+    if (!clientRegistrationId || registrationComplete) return;
     sessionStorage.setItem(
       "kult-registration-draft",
       JSON.stringify({ fullName, phone, email, companionCount, companions, clientRegistrationId }),
     );
-  }, [fullName, phone, email, companionCount, companions, clientRegistrationId, registrationCode]);
+  }, [fullName, phone, email, companionCount, companions, clientRegistrationId, registrationComplete]);
 
   function validateContact() {
     if (fullName.trim().length < 2) return "Please enter your full name.";
@@ -471,10 +502,10 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
           paymentConfirmationSent: true,
         }),
       });
-      const data = (await response.json()) as { code?: string; error?: string; status?: RegistrationStatus };
+      const data = (await response.json()) as { ok?: boolean; error?: string; status?: RegistrationStatus };
       if (data.status) setRegistrationStatus(data.status);
-      if (!response.ok || !data.code) throw new Error(data.error || "Registration could not be completed.");
-      setRegistrationCode(data.code);
+      if (!response.ok || !data.ok) throw new Error(data.error || "Registration could not be completed.");
+      setRegistrationComplete(true);
       sessionStorage.removeItem("kult-registration-draft");
       setStep(5);
     } catch (submitError) {
@@ -482,12 +513,6 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
     } finally {
       setSubmitting(false);
     }
-  }
-
-  async function copyCode() {
-    await navigator.clipboard.writeText(registrationCode);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
   }
 
   if (checkingAvailability) return <RegistrationGate kind="loading" onHome={onHome} />;
@@ -503,7 +528,7 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
     2: ["Who’s coming with you?", "Add each accompanying guest so the door list is accurate."],
     3: ["Complete payment", "Scan the QR using any UPI app."],
     4: ["Send payment proof", "Your registration needs Instagram verification."],
-    5: ["You’re on the list", "Keep this code safe—it is how you check your status."],
+    5: ["Registration received", "Please allow the organizers a couple of hours to verify your payment."],
   };
 
   return (
@@ -588,8 +613,8 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
                   <Download aria-hidden="true" /> Download QR to gallery
                 </a>
                 <div className="payment-critical" role="alert">
-                  <strong>IMPORTANT: SEND YOUR SCREENSHOT</strong>
-                  <p>After paying, send the screenshot to <b>@kult.events.in</b>. Without this proof, your payment cannot be checked and your registration will be invalid.</p>
+                  <strong>IMPORTANT: SEND YOUR SCREENSHOT + DETAILS</strong>
+                  <p>DM the screenshot to <b>@kult.events.in</b> and include the <b>registered full name and phone number</b>. Without all three, your payment cannot be matched and your registration will be invalid.</p>
                 </div>
               </div>
             </div>
@@ -599,17 +624,17 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
             <div className="proof-panel">
               <div className="instagram-mark">@</div>
               <h3>Send the screenshot to <span>@kult.events.in</span></h3>
-              <p>After paying, send a clear payment screenshot or transaction confirmation to our Instagram account.</p>
+              <p>Send a clear payment screenshot together with the exact registered name and phone number: <b>{fullName}</b> · <b>{phone}</b>.</p>
               <a className="instagram-button" href="https://www.instagram.com/kult.events.in/" target="_blank" rel="noreferrer">
                 Open Instagram <ExternalLink aria-hidden="true" />
               </a>
               <label className="confirmation-check">
                 <Checkbox checked={sentProof} onCheckedChange={(checked) => setSentProof(checked === true)} />
-                <span>I have sent the payment screenshot to @kult.events.in</span>
+                <span>I sent the screenshot, registered name, and phone number to @kult.events.in</span>
               </label>
               <div className="warning-note">
                 <ShieldCheck aria-hidden="true" />
-                <p>Please don’t skip this step. Without payment proof, the organizers cannot validate the payment and the registration will remain invalid.</p>
+                <p>Please don’t skip any detail. Without the screenshot, registered name, and phone number, the organizers cannot match the payment and the registration will remain invalid.</p>
               </div>
             </div>
           )}
@@ -617,18 +642,17 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
           {step === 5 && (
             <div className="success-panel">
               <div className="success-icon"><Check aria-hidden="true" /></div>
-              <p className="code-label">YOUR 10-DIGIT REGISTRATION CODE</p>
-              <button className="registration-code" onClick={copyCode} aria-label="Copy registration code">
-                {registrationCode.slice(0, 5)} <span>{registrationCode.slice(5)}</span>
-                <Copy aria-hidden="true" />
-              </button>
-              <p className="copy-feedback" aria-live="polite">{copied ? "Code copied" : "Tap the code to copy it"}</p>
+              <div className="verification-reminder">
+                <span>CHECK AGAIN IN A COUPLE OF HOURS</span>
+                <strong>{fullName}</strong>
+                <p>Use this registered phone number to check verification: <b>{phone}</b></p>
+              </div>
               <div className="final-details">
                 <EventDetails compact />
                 <div className="dress-card"><span>DRESS CODE</span><strong>{EVENT.dress}</strong></div>
               </div>
-              <p className="pending-note">Your status will show as pending until an organizer checks your payment screenshot.</p>
-              <Button variant="outline" onClick={onHome}>Back to event page</Button>
+              <p className="pending-note">Your status will remain pending until an organizer matches the Instagram DM with your registration. Once verified, your scannable tickets will appear automatically.</p>
+              <div className="success-actions"><Button onClick={() => onVerify(fullName, phone)}>Check verification</Button><Button variant="outline" onClick={onHome}>Back to event page</Button></div>
             </div>
           )}
 
@@ -645,7 +669,7 @@ function RegistrationFlow({ onHome }: { onHome: () => void }) {
               {step === 4 && (
                 <Button className="next-button" onClick={submitRegistration} disabled={submitting}>
                   {submitting && <LoaderCircle className="spin" aria-hidden="true" />}
-                  {submitting ? "Creating your code" : "Complete registration"}
+                  {submitting ? "Creating your tickets" : "Complete registration"}
                 </Button>
               )}
             </div>
@@ -666,11 +690,44 @@ function Field({ label, htmlFor, hint, children }: { label: string; htmlFor: str
   );
 }
 
-function VerifyPage({ code, setCode, state, message, check, onHome }: {
-  code: string;
-  setCode: (value: string) => void;
+function TicketCard({ ticket }: { ticket: Ticket }) {
+  const [qrImage, setQrImage] = useState("");
+
+  useEffect(() => {
+    if (!ticket.enabled) return;
+    let active = true;
+    void QRCode.toDataURL(`KULT-TICKET:${ticket.id}`, {
+      width: 360,
+      margin: 2,
+      errorCorrectionLevel: "H",
+      color: { dark: "#151310", light: "#ffffff" },
+    }).then((image) => { if (active) setQrImage(image); });
+    return () => { active = false; };
+  }, [ticket.enabled, ticket.id]);
+
+  return (
+    <article className={`event-ticket ${ticket.enabled ? "enabled" : "disabled"}`}>
+      <div className="ticket-header"><span>KULT · 24 OCT</span><strong>#{String(ticket.ticketNumber).padStart(2, "0")}</strong></div>
+      <div className="ticket-body">
+        <div><p>ADMIT ONE</p><h3>{ticket.holderName}</h3><small>{EVENT.time} · {EVENT.place}</small></div>
+        {ticket.enabled && qrImage ? <img src={qrImage} alt={`Scannable entry ticket for ${ticket.holderName}`} /> : <div className="ticket-disabled-mark"><XCircle /><span>DISABLED</span></div>}
+      </div>
+      <div className="ticket-footer">
+        <span className={ticket.arrived ? "ticket-used" : "ticket-ready"}>{ticket.arrived ? "Already checked in" : ticket.enabled ? "Ready to scan at entrance" : "Contact the organizer"}</span>
+        {ticket.enabled && qrImage && <a href={qrImage} download={`kult-ticket-${ticket.ticketNumber}.png`}><Download /> Save ticket</a>}
+      </div>
+    </article>
+  );
+}
+
+function VerifyPage({ fullName, setFullName, phone, setPhone, state, message, tickets, check, onHome }: {
+  fullName: string;
+  setFullName: (value: string) => void;
+  phone: string;
+  setPhone: (value: string) => void;
   state: VerifyState;
   message: string;
+  tickets: Ticket[];
   check: () => void;
   onHome: () => void;
 }) {
@@ -679,35 +736,28 @@ function VerifyPage({ code, setCode, state, message, check, onHome }: {
       <InnerHeader onHome={onHome} />
       <section className="verify-card">
         <p className="eyebrow">REGISTRATION STATUS</p>
-        <h1>Check your place on the list.</h1>
-        <p>Enter the 10-digit code shown after you completed registration.</p>
-        <div className="otp-wrap">
-          <InputOTP maxLength={10} value={code} onChange={(value) => { setCode(value); if (state !== "idle") window.setTimeout(() => undefined, 0); }} inputMode="numeric">
-            <InputOTPGroup>
-              {[0, 1, 2, 3, 4].map((index) => <InputOTPSlot className="otp-slot" index={index} key={index} />)}
-            </InputOTPGroup>
-            <span className="otp-gap">–</span>
-            <InputOTPGroup>
-              {[5, 6, 7, 8, 9].map((index) => <InputOTPSlot className="otp-slot" index={index} key={index} />)}
-            </InputOTPGroup>
-          </InputOTP>
+        <h1>Check payment and tickets.</h1>
+        <p>Use the exact name and phone number saved during registration.</p>
+        <div className="verify-fields">
+          <Field label="Registered full name" htmlFor="verify-name"><Input id="verify-name" autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your registered name" /></Field>
+          <Field label="Registered phone number" htmlFor="verify-phone"><Input id="verify-phone" autoComplete="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+91 98765 43210" /></Field>
         </div>
-        <Button className="verify-button" onClick={check} disabled={state === "loading" || code.length !== 10}>
+        <Button className="verify-button" onClick={check} disabled={state === "loading" || fullName.trim().length < 2 || phone.replace(/\D/g, "").length < 7}>
           {state === "loading" && <LoaderCircle className="spin" />}
           {state === "loading" ? "Checking" : "Check registration"}
         </Button>
 
         {state === "verified" && (
-          <div className="status-card verified"><CheckCircle2 /><div><strong>Registration verified</strong><p>Your payment has been confirmed. Keep your code ready at the entrance.</p></div></div>
+          <><div className="status-card verified"><CheckCircle2 /><div><strong>Payment verified</strong><p>Your individual scannable tickets are ready below. Save every enabled ticket to the correct attendee’s phone.</p></div></div><div className="ticket-grid">{tickets.map((ticket) => <TicketCard ticket={ticket} key={ticket.id} />)}</div></>
         )}
         {state === "pending" && (
-          <div className="status-card pending"><Clock3 /><div><strong>Verification pending</strong><p>Your registration exists. The organizers are still checking the Instagram payment screenshot.</p></div></div>
+          <div className="status-card pending"><Clock3 /><div><strong>Verification pending</strong><p>Your registration exists. Please check again after a couple of hours while the organizers match your screenshot, registered name, and phone number.</p></div></div>
         )}
         {state === "not-found" && (
-          <div className="status-card not-found"><XCircle /><div><strong>Code not found</strong><p>Check each digit and try again. Registration codes contain exactly 10 digits.</p></div></div>
+          <div className="status-card not-found"><XCircle /><div><strong>Registration not found</strong><p>Enter the exact full name and phone number used on the registration form.</p></div></div>
         )}
         {state === "error" && (
-          <div className="status-card not-found"><XCircle /><div><strong>Could not check the code</strong><p>{message}</p></div></div>
+          <div className="status-card not-found"><XCircle /><div><strong>Could not check registration</strong><p>{message}</p></div></div>
         )}
         <button className="text-back" onClick={onHome}><ArrowLeft /> Back to event page</button>
       </section>
@@ -720,6 +770,7 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
   const [organizerCode, setOrganizerCode] = useState("");
   const [rows, setRows] = useState<Registration[]>([]);
   const [companions, setCompanions] = useState<AdminCompanion[]>([]);
+  const [tickets, setTickets] = useState<AdminTicket[]>([]);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -729,6 +780,11 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
   const [deletingId, setDeletingId] = useState("");
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
   const [savingCapacity, setSavingCapacity] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerState, setScannerState] = useState<"idle" | "starting" | "scanning" | "checking" | "success" | "error">("idle");
+  const [scannerMessage, setScannerMessage] = useState("");
+  const scannerRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
+  const scanLockRef = useRef(false);
 
   const loadRegistrations = useCallback(async () => {
     try {
@@ -737,10 +793,11 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
         setAccess("login");
         return;
       }
-      const data = (await response.json()) as { registrations?: Registration[]; companions?: AdminCompanion[]; status?: RegistrationStatus; error?: string };
+      const data = (await response.json()) as { registrations?: Registration[]; companions?: AdminCompanion[]; tickets?: AdminTicket[]; status?: RegistrationStatus; error?: string };
       if (!response.ok) throw new Error(data.error || "Could not load registrations.");
       setRows(data.registrations ?? []);
       setCompanions(data.companions ?? []);
+      setTickets(data.tickets ?? []);
       setRegistrationStatus(data.status ?? null);
       setAccess("dashboard");
     } catch (loadError) {
@@ -753,6 +810,12 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
     const initialLoad = window.setTimeout(() => void loadRegistrations(), 0);
     return () => window.clearTimeout(initialLoad);
   }, [loadRegistrations]);
+
+  useEffect(() => () => {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (scanner) void scanner.stop().catch(() => undefined).finally(() => { try { scanner.clear(); } catch { /* already cleared */ } });
+  }, []);
 
   async function login(event: React.FormEvent) {
     event.preventDefault();
@@ -797,6 +860,90 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
       setRows(previous);
       setError(updateError instanceof Error ? updateError.message : "Update failed.");
     }
+  }
+
+  async function toggleTicket(id: string, field: "enabled" | "arrived", value: boolean) {
+    const previous = tickets;
+    setTickets((current) => current.map((ticket) => ticket.id === id ? { ...ticket, [field]: value } : ticket));
+    setError("");
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticketId: id, ticketField: field, value }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Ticket update failed.");
+      if (field === "arrived") await loadRegistrations();
+    } catch (updateError) {
+      setTickets(previous);
+      setError(updateError instanceof Error ? updateError.message : "Ticket update failed.");
+    }
+  }
+
+  async function stopScannerCamera() {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (!scanner) return;
+    try { await scanner.stop(); } catch { /* camera may already be stopped */ }
+    try { scanner.clear(); } catch { /* reader may already be cleared */ }
+  }
+
+  async function processTicketScan(scanData: string) {
+    if (scanLockRef.current) return;
+    scanLockRef.current = true;
+    setScannerState("checking");
+    setScannerMessage("Checking ticket…");
+    await stopScannerCamera();
+    try {
+      const response = await fetch("/api/admin/scan-ticket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scanData }),
+      });
+      const data = (await response.json()) as { holderName?: string; alreadyArrived?: boolean; error?: string };
+      if (!response.ok) throw new Error(data.error || "Ticket could not be checked.");
+      setScannerState("success");
+      setScannerMessage(data.alreadyArrived ? `${data.holderName} was already checked in.` : `${data.holderName} is checked in.`);
+      await loadRegistrations();
+    } catch (scanError) {
+      setScannerState("error");
+      setScannerMessage(scanError instanceof Error ? scanError.message : "Ticket could not be checked.");
+    } finally {
+      scanLockRef.current = false;
+    }
+  }
+
+  async function startScanner() {
+    setScannerOpen(true);
+    setScannerState("starting");
+    setScannerMessage("Starting camera…");
+    await new Promise((resolve) => window.setTimeout(resolve, 80));
+    try {
+      await stopScannerCamera();
+      const { Html5Qrcode } = await import("html5-qrcode");
+      const scanner = new Html5Qrcode("kult-ticket-reader");
+      scannerRef.current = scanner;
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        (decodedText) => { void processTicketScan(decodedText); },
+        () => undefined,
+      );
+      setScannerState("scanning");
+      setScannerMessage("Point the camera at a KULT ticket QR code.");
+    } catch (scannerError) {
+      await stopScannerCamera();
+      setScannerState("error");
+      setScannerMessage(scannerError instanceof Error ? scannerError.message : "Camera scanner could not start.");
+    }
+  }
+
+  async function closeScanner() {
+    await stopScannerCamera();
+    setScannerOpen(false);
+    setScannerState("idle");
+    setScannerMessage("");
   }
 
   async function toggleCapacityOverride(value: boolean) {
@@ -872,7 +1019,7 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return rows;
-    return rows.filter((row) => [row.full_name, row.phone, row.email, row.code].some((value) => value.toLowerCase().includes(query)));
+    return rows.filter((row) => [row.full_name, row.phone, row.email].some((value) => value.toLowerCase().includes(query)));
   }, [rows, search]);
 
   if (access !== "dashboard") {
@@ -905,7 +1052,7 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
   const totalGuests = rows.reduce((total, row) => total + Number(row.companion_count), 0);
   const participantCount = registrationStatus?.participantCount ?? rows.length + totalGuests;
   const verifiedCount = rows.filter((row) => row.verified).length;
-  const arrivedCount = rows.filter((row) => row.arrived).length;
+  const arrivedTicketCount = tickets.filter((ticket) => ticket.arrived).length;
 
   return (
     <main className="admin-shell">
@@ -918,8 +1065,23 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
         <div className="stats-grid">
           <div><span>PARTICIPANTS</span><strong>{participantCount}</strong><small>{rows.length} registrations including groups</small></div>
           <div><span>VERIFIED</span><strong>{verifiedCount}</strong><small>{rows.length - verifiedCount} awaiting payment check</small></div>
-          <div><span>ARRIVED</span><strong>{arrivedCount}</strong><small>{Math.max(0, verifiedCount - arrivedCount)} verified not checked in</small></div>
+          <div><span>TICKETS SCANNED</span><strong>{arrivedTicketCount}</strong><small>{Math.max(0, tickets.filter((ticket) => ticket.enabled).length - arrivedTicketCount)} active tickets not checked in</small></div>
         </div>
+        <div className="scanner-control">
+          <div><span className="capacity-kicker">EVENT CHECK-IN</span><h2>Scan attendee tickets</h2><p>Each successful scan validates the ticket and marks that individual attendee as arrived.</p></div>
+          <Button className="scanner-button" onClick={() => void startScanner()}><Camera /> Open ticket scanner</Button>
+        </div>
+        {scannerOpen && (
+          <div className="scanner-panel" role="dialog" aria-label="KULT ticket scanner">
+            <div className="scanner-panel-head"><div><span>LIVE SCANNER</span><h2>Scan entry ticket</h2></div><Button variant="ghost" onClick={() => void closeScanner()}>Close</Button></div>
+            <div id="kult-ticket-reader" className="ticket-reader" />
+            <div className={`scanner-result ${scannerState}`}>
+              {scannerState === "success" ? <CheckCircle2 /> : scannerState === "error" ? <XCircle /> : <QrCode />}
+              <div><strong>{scannerState === "success" ? "Ticket accepted" : scannerState === "error" ? "Ticket rejected" : "Scanner ready"}</strong><p>{scannerMessage}</p></div>
+            </div>
+            {(scannerState === "success" || scannerState === "error") && <Button className="scanner-next" onClick={() => void startScanner()}>Scan next ticket</Button>}
+          </div>
+        )}
         <div className={`capacity-control ${registrationStatus?.registrationOpen ? "open" : "paused"}`}>
           <div>
             <span className="capacity-kicker">REGISTRATION CAPACITY</span>
@@ -933,9 +1095,9 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
         </div>
         <div className="admin-table-card">
           <div className="table-toolbar">
-            <div><h2>Registrations</h2><p>Confirm payment first; use Arrived at the door.</p></div>
+            <div><h2>Registrations and tickets</h2><p>Confirm payment, enable the correct tickets, then scan each ticket at the entrance.</p></div>
             <div className="table-toolbar-actions">
-              <div className="search-box"><Search /><Input aria-label="Search registrations" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone, email or code" /></div>
+              <div className="search-box"><Search /><Input aria-label="Search registrations" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone or email" /></div>
               <Button className="add-person-button" onClick={() => { setShowAdd((current) => !current); setError(""); }}>
                 <Plus aria-hidden="true" /> {showAdd ? "Close" : "Add person"}
               </Button>
@@ -943,7 +1105,7 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
           </div>
           {showAdd && (
             <form className="add-person-panel" onSubmit={addPerson}>
-              <div className="add-person-heading"><div><h3>Add a person</h3><p>For walk-ins or manual entries. They will receive a new 10-digit code.</p></div><Users aria-hidden="true" /></div>
+              <div className="add-person-heading"><div><h3>Add a person</h3><p>For walk-ins or manual entries. One scannable ticket will be created automatically.</p></div><Users aria-hidden="true" /></div>
               <div className="add-person-fields">
                 <Field label="Full name" htmlFor="admin-full-name"><Input id="admin-full-name" value={newPerson.fullName} onChange={(event) => setNewPerson((current) => ({ ...current, fullName: event.target.value }))} placeholder="Full name" /></Field>
                 <Field label="Phone number" htmlFor="admin-phone"><Input id="admin-phone" inputMode="tel" value={newPerson.phone} onChange={(event) => setNewPerson((current) => ({ ...current, phone: event.target.value }))} placeholder="+91 98765 43210" /></Field>
@@ -960,25 +1122,22 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Registrant</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Party</TableHead>
-                  <TableHead className="check-column">Verified</TableHead>
-                  <TableHead className="check-column">Arrived</TableHead>
+                  <TableHead>Individual tickets</TableHead>
+                  <TableHead className="check-column">Payment verified</TableHead>
                   <TableHead className="action-column">Manage</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((row) => {
                   const guests = companions.filter((person) => person.registration_id === row.id);
+                  const rowTickets = tickets.filter((ticket) => ticket.registration_id === row.id);
                   return (
                     <TableRow key={row.id}>
                       <TableCell>
                         <div className="registrant-cell"><strong>{row.full_name}</strong><span>{row.phone} · {row.email}</span>{guests.length > 0 && <small>Guests: {guests.map((guest) => guest.full_name).join(", ")}</small>}</div>
                       </TableCell>
-                      <TableCell><span className="code-chip">{row.code.slice(0, 5)} {row.code.slice(5)}</span></TableCell>
-                      <TableCell>{1 + Number(row.companion_count)}</TableCell>
+                      <TableCell><div className="admin-ticket-list">{rowTickets.map((ticket) => <div className={`admin-ticket-row ${ticket.enabled ? "" : "disabled"}`} key={ticket.id}><div><strong>#{ticket.ticket_number} · {ticket.holder_name}</strong><small>{ticket.arrived ? "Arrived" : ticket.enabled ? "Ready" : "Disabled"}</small></div><label><Checkbox aria-label={`Enable ticket for ${ticket.holder_name}`} checked={Boolean(ticket.enabled)} onCheckedChange={(checked) => void toggleTicket(ticket.id, "enabled", checked === true)} /><span>Enabled</span></label><label><Checkbox aria-label={`Mark ticket for ${ticket.holder_name} arrived`} checked={Boolean(ticket.arrived)} disabled={!ticket.enabled} onCheckedChange={(checked) => void toggleTicket(ticket.id, "arrived", checked === true)} /><span>Arrived</span></label></div>)}</div></TableCell>
                       <TableCell className="check-column"><Checkbox aria-label={`Verify ${row.full_name}`} checked={Boolean(row.verified)} onCheckedChange={(checked) => toggle(row.id, "verified", checked === true)} /></TableCell>
-                      <TableCell className="check-column"><Checkbox aria-label={`Mark ${row.full_name} arrived`} checked={Boolean(row.arrived)} onCheckedChange={(checked) => toggle(row.id, "arrived", checked === true)} /></TableCell>
                       <TableCell className="action-column"><Button variant="ghost" className="remove-person-button" onClick={() => removePerson(row)} disabled={deletingId === row.id}><Trash2 aria-hidden="true" />{deletingId === row.id ? "Removing…" : "Remove"}</Button></TableCell>
                     </TableRow>
                   );

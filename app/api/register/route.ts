@@ -55,10 +55,10 @@ export async function POST(request: Request) {
 
     const sql = await getDatabase();
     const previous = await sql`
-      SELECT code FROM registrations WHERE client_registration_id = ${clientRegistrationId} LIMIT 1
+      SELECT id FROM registrations WHERE client_registration_id = ${clientRegistrationId} LIMIT 1
     `;
     if (previous[0]) {
-      return Response.json({ code: String(previous[0].code), repeatedRequest: true });
+      return Response.json({ ok: true, repeatedRequest: true });
     }
     const duplicate = await sql`
       SELECT normalized_phone, normalized_email FROM registrations
@@ -82,6 +82,14 @@ export async function POST(request: Request) {
         phone: person.phone?.trim() || null,
       })),
     );
+    const ticketJson = JSON.stringify([
+      { id: crypto.randomUUID(), holder_name: fullName, ticket_number: 1 },
+      ...companions.map((person, index) => ({
+        id: crypto.randomUUID(),
+        holder_name: person.fullName!.trim(),
+        ticket_number: index + 2,
+      })),
+    ]);
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const code = createTenDigitCode();
       try {
@@ -109,7 +117,7 @@ export async function POST(request: Request) {
             FROM settings, attendance
             WHERE settings.allow_over_capacity
                OR attendance.participant_count + ${partySize} <= ${CAPACITY_LIMIT}
-            RETURNING id, code
+            RETURNING id
           ),
           inserted_companions AS (
             INSERT INTO companions (id, registration_id, full_name, phone)
@@ -118,8 +126,16 @@ export async function POST(request: Request) {
             CROSS JOIN jsonb_to_recordset(${companionJson}::jsonb)
               AS guest(id text, full_name text, phone text)
             RETURNING id
+          ),
+          inserted_tickets AS (
+            INSERT INTO tickets (id, registration_id, holder_name, ticket_number)
+            SELECT ticket.id, inserted_registration.id, ticket.holder_name, ticket.ticket_number
+            FROM inserted_registration
+            CROSS JOIN jsonb_to_recordset(${ticketJson}::jsonb)
+              AS ticket(id text, holder_name text, ticket_number smallint)
+            RETURNING id
           )
-          SELECT code FROM inserted_registration
+          SELECT id FROM inserted_registration
         `;
         if (!created[0]) {
           const status = await getRegistrationStatus();
@@ -134,16 +150,16 @@ export async function POST(request: Request) {
             { status: 409 },
           );
         }
-        return Response.json({ code }, { status: 201 });
+        return Response.json({ ok: true }, { status: 201 });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (message.includes("registrations_code_key") && attempt < 3) continue;
         if (message.includes("client_registration_id")) {
           const retryResult = await sql`
-            SELECT code FROM registrations WHERE client_registration_id = ${clientRegistrationId} LIMIT 1
+            SELECT id FROM registrations WHERE client_registration_id = ${clientRegistrationId} LIMIT 1
           `;
           if (retryResult[0]) {
-            return Response.json({ code: String(retryResult[0].code), repeatedRequest: true });
+            return Response.json({ ok: true, repeatedRequest: true });
           }
         }
         if (message.includes("normalized_phone") || message.includes("normalized_email")) {
@@ -155,7 +171,7 @@ export async function POST(request: Request) {
         throw error;
       }
     }
-    return Response.json({ error: "Could not create a unique registration code. Please try again." }, { status: 503 });
+    return Response.json({ error: "Could not complete the registration. Please try again." }, { status: 503 });
   } catch (error) {
     return storageError(error);
   }
