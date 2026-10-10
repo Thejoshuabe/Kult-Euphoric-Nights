@@ -7,19 +7,21 @@ import {
   storageError,
 } from "@/lib/kult-server";
 
-type CompanionInput = { fullName?: string; phone?: string };
+type CompanionInput = { fullName?: string; age?: number | string; phone?: string };
 
 export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as {
       clientRegistrationId?: string;
       fullName?: string;
+      age?: number | string;
       phone?: string;
       email?: string;
       companions?: CompanionInput[];
       paymentConfirmationSent?: boolean;
     };
     const fullName = payload.fullName?.trim() ?? "";
+    const age = Number(payload.age);
     const phone = payload.phone?.trim() ?? "";
     const email = payload.email?.trim() ?? "";
     const normalizedPhone = normalizePhone(phone);
@@ -29,6 +31,9 @@ export async function POST(request: Request) {
 
     if (fullName.length < 2 || fullName.length > 80) {
       return Response.json({ error: "Please enter your full name." }, { status: 400 });
+    }
+    if (!Number.isInteger(age) || age < 16 || age > 24) {
+      return Response.json({ error: "Please select an age between 16 and 24." }, { status: 400 });
     }
     if (normalizedPhone.length < 7 || normalizedPhone.length > 15) {
       return Response.json({ error: "Please enter a valid phone number." }, { status: 400 });
@@ -44,6 +49,18 @@ export async function POST(request: Request) {
     }
     if (companions.some((person) => !person.fullName?.trim())) {
       return Response.json({ error: "Please add a name for every accompanying guest." }, { status: 400 });
+    }
+    if (companions.some((person) => {
+      const guestAge = Number(person.age);
+      return !Number.isInteger(guestAge) || guestAge < 16 || guestAge > 24;
+    })) {
+      return Response.json({ error: "Every guest must be between 16 and 24 years old." }, { status: 400 });
+    }
+    if (companions.some((person) => {
+      const guestPhone = normalizePhone(person.phone ?? "");
+      return guestPhone.length < 7 || guestPhone.length > 15;
+    })) {
+      return Response.json({ error: "Please enter a valid phone number for every guest." }, { status: 400 });
     }
     if (!payload.paymentConfirmationSent) {
       return Response.json(
@@ -78,7 +95,8 @@ export async function POST(request: Request) {
       companions.map((person) => ({
         id: crypto.randomUUID(),
         full_name: person.fullName!.trim(),
-        phone: person.phone?.trim() || null,
+        age: Number(person.age),
+        phone: person.phone!.trim(),
       })),
     );
     const ticketJson = JSON.stringify([
@@ -108,12 +126,12 @@ export async function POST(request: Request) {
           inserted_registration AS (
             INSERT INTO registrations (
               id, code, client_registration_id, full_name, phone, email,
-              normalized_phone, normalized_email, companion_count, payment_confirmation_sent,
+              age, normalized_phone, normalized_email, companion_count, payment_confirmation_sent,
               ticket_price, total_amount
             )
             SELECT
               ${registrationId}, ${code}, ${clientRegistrationId}, ${fullName}, ${phone}, ${email},
-              ${normalizedPhone}, ${normalizedEmail}, ${companions.length}, TRUE,
+              ${age}, ${normalizedPhone}, ${normalizedEmail}, ${companions.length}, TRUE,
               settings.ticket_price, settings.ticket_price * ${partySize}
             FROM settings, attendance
             WHERE settings.allow_over_capacity
@@ -121,11 +139,11 @@ export async function POST(request: Request) {
             RETURNING id
           ),
           inserted_companions AS (
-            INSERT INTO companions (id, registration_id, full_name, phone)
-            SELECT guest.id, inserted_registration.id, guest.full_name, guest.phone
+            INSERT INTO companions (id, registration_id, full_name, age, phone)
+            SELECT guest.id, inserted_registration.id, guest.full_name, guest.age, guest.phone
             FROM inserted_registration
             CROSS JOIN jsonb_to_recordset(${companionJson}::jsonb)
-              AS guest(id text, full_name text, phone text)
+              AS guest(id text, full_name text, age smallint, phone text)
             RETURNING id
           ),
           inserted_tickets AS (
@@ -143,7 +161,7 @@ export async function POST(request: Request) {
           return Response.json(
             {
               error: status.capacityReached
-                ? "Registration is currently paused because all 35 participant spots are filled."
+                ? `Registration is currently paused because all ${status.capacityLimit} participant spots are filled.`
                 : `Only ${Math.max(0, status.capacityLimit - status.participantCount)} participant spots remain. Please reduce the number of accompanying guests.`,
               code: "CAPACITY_REACHED",
               status,

@@ -20,6 +20,7 @@ export async function ensureSchema() {
           code VARCHAR(10) NOT NULL UNIQUE,
           client_registration_id TEXT NOT NULL UNIQUE,
           full_name TEXT NOT NULL,
+          age SMALLINT,
           phone TEXT NOT NULL,
           email TEXT NOT NULL,
           normalized_phone TEXT NOT NULL UNIQUE,
@@ -33,6 +34,7 @@ export async function ensureSchema() {
         )`,
         sql`ALTER TABLE registrations ADD COLUMN IF NOT EXISTS ticket_price INTEGER`,
         sql`ALTER TABLE registrations ADD COLUMN IF NOT EXISTS total_amount INTEGER`,
+        sql`ALTER TABLE registrations ADD COLUMN IF NOT EXISTS age SMALLINT`,
         sql`UPDATE registrations SET ticket_price = 599 WHERE ticket_price IS NULL`,
         sql`UPDATE registrations
             SET total_amount = ticket_price * (1 + companion_count)
@@ -45,8 +47,10 @@ export async function ensureSchema() {
           id TEXT PRIMARY KEY,
           registration_id TEXT NOT NULL REFERENCES registrations(id) ON DELETE CASCADE,
           full_name TEXT NOT NULL,
+          age SMALLINT,
           phone TEXT
         )`,
+        sql`ALTER TABLE companions ADD COLUMN IF NOT EXISTS age SMALLINT`,
         sql`CREATE INDEX IF NOT EXISTS idx_companions_registration_id ON companions(registration_id)`,
         sql`CREATE TABLE IF NOT EXISTS tickets (
           id TEXT PRIMARY KEY,

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
   ArrowLeft,
+  AtSign,
   CalendarDays,
   Camera,
   Check,
@@ -16,6 +17,7 @@ import {
   LockKeyhole,
   LogOut,
   MapPin,
+  Maximize2,
   Plus,
   QrCode,
   Search,
@@ -23,6 +25,7 @@ import {
   ShieldCheck,
   Trash2,
   Users,
+  X,
   XCircle,
 } from "lucide-react";
 
@@ -41,12 +44,13 @@ import {
 } from "@/components/ui/table";
 
 type Screen = "home" | "register" | "verify" | "organizer";
-type Companion = { fullName: string; phone: string };
+type Companion = { fullName: string; age: string; phone: string };
 type VerifyState = "idle" | "loading" | "verified" | "pending" | "not-found" | "error";
 
 type Registration = {
   id: string;
   full_name: string;
+  age: number | null;
   phone: string;
   email: string;
   companion_count: number;
@@ -61,6 +65,7 @@ type AdminCompanion = {
   id: string;
   registration_id: string;
   full_name: string;
+  age: number | null;
   phone: string | null;
 };
 
@@ -105,6 +110,7 @@ const rupees = new Intl.NumberFormat("en-IN", {
   currency: "INR",
   maximumFractionDigits: 0,
 });
+const ALLOWED_AGES = Array.from({ length: 9 }, (_, index) => index + 16);
 
 async function fetchRegistrationStatus() {
   const response = await fetch("/api/registration-status", { cache: "no-store" });
@@ -308,6 +314,9 @@ function HomePage({ onOpen }: { onOpen: (screen: Screen) => void }) {
             <Button size="lg" variant="outline" className="secondary-cta" onClick={() => onOpen("verify")}>
               Check verification
             </Button>
+            <a className="instagram-home-link" href="https://www.instagram.com/kult.events.in/" target="_blank" rel="noreferrer">
+              <AtSign aria-hidden="true" /> Contact organizers
+            </a>
           </div>
         </div>
         <button className="organizer-link" onClick={() => onOpen("organizer")}>
@@ -382,6 +391,7 @@ function RegistrationGate({
 function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: (fullName: string, phone: string) => void }) {
   const [step, setStep] = useState(1);
   const [fullName, setFullName] = useState("");
+  const [age, setAge] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [companionCount, setCompanionCount] = useState(0);
@@ -421,17 +431,23 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
       try {
         const draft = JSON.parse(saved) as {
           fullName?: string;
+          age?: string | number;
           phone?: string;
           email?: string;
           companionCount?: number;
-          companions?: Companion[];
+          companions?: Array<Partial<Companion>>;
           clientRegistrationId?: string;
         };
         setFullName(draft.fullName ?? "");
+        setAge(String(draft.age ?? ""));
         setPhone(draft.phone ?? "");
         setEmail(draft.email ?? "");
         setCompanionCount(draft.companionCount ?? 0);
-        setCompanions(draft.companions ?? []);
+        setCompanions((draft.companions ?? []).map((person) => ({
+          fullName: person.fullName ?? "",
+          age: String(person.age ?? ""),
+          phone: person.phone ?? "",
+        })));
         if (draft.clientRegistrationId) setClientRegistrationId(draft.clientRegistrationId);
       } catch {
         sessionStorage.removeItem("kult-registration-draft");
@@ -444,12 +460,14 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
     if (!clientRegistrationId || registrationComplete) return;
     sessionStorage.setItem(
       "kult-registration-draft",
-      JSON.stringify({ fullName, phone, email, companionCount, companions, clientRegistrationId }),
+      JSON.stringify({ fullName, age, phone, email, companionCount, companions, clientRegistrationId }),
     );
-  }, [fullName, phone, email, companionCount, companions, clientRegistrationId, registrationComplete]);
+  }, [fullName, age, phone, email, companionCount, companions, clientRegistrationId, registrationComplete]);
 
   function validateContact() {
     if (fullName.trim().length < 2) return "Please enter your full name.";
+    const numericAge = Number(age);
+    if (!Number.isInteger(numericAge) || numericAge < 16 || numericAge > 24) return "Please select your age between 16 and 24.";
     const digits = phone.replace(/\D/g, "");
     if (digits.length < 7 || digits.length > 15) return "Please enter a valid phone number.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Please enter a valid email address.";
@@ -480,7 +498,7 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
     if (message) return setError(message);
     setError("");
     setCompanions((current) =>
-      Array.from({ length: companionCount }, (_, index) => current[index] ?? { fullName: "", phone: "" }),
+      Array.from({ length: companionCount }, (_, index) => current[index] ?? { fullName: "", age: "", phone: "" }),
     );
     if (companionCount > 0) setStep(2);
     else void continueToPayment();
@@ -489,6 +507,15 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
   function nextFromCompanions() {
     if (companions.some((person) => !person.fullName.trim())) {
       return setError("Please enter the name of every accompanying guest.");
+    }
+    if (companions.some((person) => !ALLOWED_AGES.includes(Number(person.age)))) {
+      return setError("Please select an age between 16 and 24 for every guest.");
+    }
+    if (companions.some((person) => {
+      const digits = person.phone.replace(/\D/g, "");
+      return digits.length < 7 || digits.length > 15;
+    })) {
+      return setError("Please enter a valid phone number for every guest.");
     }
     setError("");
     void continueToPayment();
@@ -507,6 +534,7 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
         body: JSON.stringify({
           clientRegistrationId,
           fullName,
+          age: Number(age),
           phone,
           email,
           companions,
@@ -571,9 +599,17 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
 
           {step === 1 && (
             <div className="form-stack">
-              <Field label="Full name" htmlFor="full-name">
-                <Input id="full-name" autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name" />
-              </Field>
+              <div className="form-grid">
+                <Field label="Full name" htmlFor="full-name">
+                  <Input id="full-name" autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name" />
+                </Field>
+                <Field label="Age (16–24)" htmlFor="age">
+                  <select id="age" value={age} onChange={(event) => setAge(event.target.value)}>
+                    <option value="">Select age</option>
+                    {ALLOWED_AGES.map((allowedAge) => <option key={allowedAge} value={allowedAge}>{allowedAge}</option>)}
+                  </select>
+                </Field>
+              </div>
               <div className="form-grid">
                 <Field label="Phone number" htmlFor="phone">
                   <Input id="phone" autoComplete="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+91 98765 43210" />
@@ -604,8 +640,14 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
                     <Field label="Guest name" htmlFor={`guest-name-${index}`}>
                       <Input id={`guest-name-${index}`} value={person.fullName} onChange={(event) => setCompanions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, fullName: event.target.value } : item))} placeholder="Full name" />
                     </Field>
-                    <Field label="Phone number (optional)" htmlFor={`guest-phone-${index}`}>
-                      <Input id={`guest-phone-${index}`} inputMode="tel" value={person.phone} onChange={(event) => setCompanions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, phone: event.target.value } : item))} placeholder="Optional" />
+                    <Field label="Age (16–24)" htmlFor={`guest-age-${index}`}>
+                      <select id={`guest-age-${index}`} value={person.age} onChange={(event) => setCompanions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, age: event.target.value } : item))}>
+                        <option value="">Select age</option>
+                        {ALLOWED_AGES.map((allowedAge) => <option key={allowedAge} value={allowedAge}>{allowedAge}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Phone number" htmlFor={`guest-phone-${index}`}>
+                      <Input id={`guest-phone-${index}`} inputMode="tel" value={person.phone} onChange={(event) => setCompanions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, phone: event.target.value } : item))} placeholder="Required phone number" />
                     </Field>
                   </div>
                 </div>
@@ -632,8 +674,13 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
                   <Download aria-hidden="true" /> Download QR to gallery
                 </a>
                 <div className="payment-critical" role="alert">
-                  <strong>IMPORTANT: SEND YOUR SCREENSHOT + DETAILS</strong>
-                  <p>DM the screenshot to <b>@kult.events.in</b> and include the <b>registered full name and phone number</b>. Without all three, your payment cannot be matched and your registration will be invalid.</p>
+                  <strong>IMPORTANT: SEND ALL 3 ITEMS</strong>
+                  <div className="proof-requirements">
+                    <span><b>1</b> Payment <mark>SCREENSHOT</mark></span>
+                    <span><b>2</b> Registered full name</span>
+                    <span><b>3</b> Registered phone number</span>
+                  </div>
+                  <p>DM all three to <b>@kult.events.in</b>. Without the <b>payment screenshot</b>, registered name, and phone number, your payment cannot be matched and your registration will be invalid.</p>
                 </div>
               </div>
             </div>
@@ -670,7 +717,7 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
                 <EventDetails compact />
                 <div className="dress-card"><span>DRESS CODE</span><strong>{EVENT.dress}</strong></div>
               </div>
-              <p className="pending-note">Your status will remain pending until an organizer matches the Instagram DM with your registration. Once verified, your scannable tickets will appear automatically.</p>
+              <p className="pending-note">Your status will remain pending until an organizer matches the Instagram DM with your registration. <strong>After a couple of hours, open the Check verification page using your registered name and phone number. Your QR tickets will be available there after approval, and you must show those QR codes at the event entrance.</strong></p>
               <div className="success-actions"><Button onClick={() => onVerify(fullName, phone)}>Check verification</Button><Button variant="outline" onClick={onHome}>Back to event page</Button></div>
             </div>
           )}
@@ -709,31 +756,86 @@ function Field({ label, htmlFor, hint, children }: { label: string; htmlFor: str
   );
 }
 
-function TicketCard({ ticket }: { ticket: Ticket }) {
+function TicketQrAccess({ ticketId, holderName, ticketNumber, enabled, variant = "ticket" }: {
+  ticketId: string;
+  holderName: string;
+  ticketNumber: number;
+  enabled: boolean;
+  variant?: "ticket" | "admin";
+}) {
   const [qrImage, setQrImage] = useState("");
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    if (!ticket.enabled) return;
     let active = true;
-    void QRCode.toDataURL(`KULT-TICKET:${ticket.id}`, {
+    void QRCode.toDataURL(`KULT-TICKET:${ticketId}`, {
       width: 360,
       margin: 2,
       errorCorrectionLevel: "H",
       color: { dark: "#151310", light: "#ffffff" },
     }).then((image) => { if (active) setQrImage(image); });
     return () => { active = false; };
-  }, [ticket.enabled, ticket.id]);
+  }, [ticketId]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [expanded]);
+
+  const trigger = variant === "admin" ? (
+    <button type="button" className="admin-qr-button" onClick={() => setExpanded(true)} disabled={!qrImage}>
+      <QrCode aria-hidden="true" /> View QR
+    </button>
+  ) : enabled && qrImage ? (
+    <button type="button" className="ticket-qr-trigger" onClick={() => setExpanded(true)} aria-label={`Expand QR ticket for ${holderName}`}>
+      <img src={qrImage} alt={`Scannable entry ticket for ${holderName}`} />
+      <span><Maximize2 aria-hidden="true" /> Tap to expand</span>
+    </button>
+  ) : (
+    <div className="ticket-disabled-mark"><XCircle /><span>DISABLED</span></div>
+  );
+
+  return (
+    <>
+      {trigger}
+      {expanded && qrImage && (
+        <div className="ticket-qr-modal" role="dialog" aria-modal="true" aria-label={`Expanded QR ticket for ${holderName}`} onClick={() => setExpanded(false)}>
+          <div className="ticket-qr-modal-card" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="ticket-qr-close" onClick={() => setExpanded(false)} aria-label="Close expanded ticket" autoFocus><X /></button>
+            <p>KULT · ENTRY TICKET #{String(ticketNumber).padStart(2, "0")}</p>
+            <h2>{holderName}</h2>
+            {!enabled && <div className="ticket-qr-warning">This ticket is currently disabled.</div>}
+            <img src={qrImage} alt={`Large scannable entry QR code for ${holderName}`} />
+            <strong>Show this QR code at the event entrance.</strong>
+            <a href={qrImage} download={`kult-ticket-${ticketNumber}.png`}><Download /> Save QR to phone</a>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function TicketCard({ ticket }: { ticket: Ticket }) {
 
   return (
     <article className={`event-ticket ${ticket.enabled ? "enabled" : "disabled"}`}>
       <div className="ticket-header"><span>KULT · 24 OCT</span><strong>#{String(ticket.ticketNumber).padStart(2, "0")}</strong></div>
       <div className="ticket-body">
         <div><p>ADMIT ONE</p><h3>{ticket.holderName}</h3><small>{EVENT.time} · {EVENT.place}</small></div>
-        {ticket.enabled && qrImage ? <img src={qrImage} alt={`Scannable entry ticket for ${ticket.holderName}`} /> : <div className="ticket-disabled-mark"><XCircle /><span>DISABLED</span></div>}
+        <TicketQrAccess ticketId={ticket.id} holderName={ticket.holderName} ticketNumber={ticket.ticketNumber} enabled={ticket.enabled} />
       </div>
       <div className="ticket-footer">
         <span className={ticket.arrived ? "ticket-used" : "ticket-ready"}>{ticket.arrived ? "Already checked in" : ticket.enabled ? "Ready to scan at entrance" : "Contact the organizer"}</span>
-        {ticket.enabled && qrImage && <a href={qrImage} download={`kult-ticket-${ticket.ticketNumber}.png`}><Download /> Save ticket</a>}
+        <span>{ticket.enabled ? "Tap the QR to enlarge it" : ""}</span>
       </div>
     </article>
   );
@@ -794,7 +896,7 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [newPerson, setNewPerson] = useState({ fullName: "", phone: "", email: "" });
+  const [newPerson, setNewPerson] = useState({ fullName: "", age: "", phone: "", email: "" });
   const [savingPerson, setSavingPerson] = useState(false);
   const [deletingId, setDeletingId] = useState("");
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
@@ -1074,7 +1176,7 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error || "Could not add registration.");
-      setNewPerson({ fullName: "", phone: "", email: "" });
+      setNewPerson({ fullName: "", age: "", phone: "", email: "" });
       setShowAdd(false);
       await loadRegistrations();
     } catch (addError) {
@@ -1213,10 +1315,11 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
               <div className="add-person-heading"><div><h3>Add a person</h3><p>For walk-ins or manual entries. One scannable ticket will be created automatically.</p></div><Users aria-hidden="true" /></div>
               <div className="add-person-fields">
                 <Field label="Full name" htmlFor="admin-full-name"><Input id="admin-full-name" value={newPerson.fullName} onChange={(event) => setNewPerson((current) => ({ ...current, fullName: event.target.value }))} placeholder="Full name" /></Field>
+                <Field label="Age (16–24)" htmlFor="admin-age"><select id="admin-age" value={newPerson.age} onChange={(event) => setNewPerson((current) => ({ ...current, age: event.target.value }))}><option value="">Select age</option>{ALLOWED_AGES.map((allowedAge) => <option key={allowedAge} value={allowedAge}>{allowedAge}</option>)}</select></Field>
                 <Field label="Phone number" htmlFor="admin-phone"><Input id="admin-phone" inputMode="tel" value={newPerson.phone} onChange={(event) => setNewPerson((current) => ({ ...current, phone: event.target.value }))} placeholder="+91 98765 43210" /></Field>
                 <Field label="Email ID" htmlFor="admin-email"><Input id="admin-email" type="email" value={newPerson.email} onChange={(event) => setNewPerson((current) => ({ ...current, email: event.target.value }))} placeholder="you@example.com" /></Field>
               </div>
-              <div className="add-person-actions"><p>Duplicate phone numbers and emails are blocked automatically.</p><Button type="submit" disabled={savingPerson || !newPerson.fullName || !newPerson.phone || !newPerson.email}>{savingPerson ? "Adding…" : "Add to list"}</Button></div>
+              <div className="add-person-actions"><p>Duplicate phone numbers and emails are blocked automatically.</p><Button type="submit" disabled={savingPerson || !newPerson.fullName || !newPerson.age || !newPerson.phone || !newPerson.email}>{savingPerson ? "Adding…" : "Add to list"}</Button></div>
             </form>
           )}
           {error && <div className="form-error admin-error"><XCircle />{error}</div>}
@@ -1239,9 +1342,9 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
                   return (
                     <TableRow key={row.id}>
                       <TableCell>
-                        <div className="registrant-cell"><strong>{row.full_name}</strong><span>{row.phone} · {row.email}</span><span className="registration-amount">{1 + Number(row.companion_count)} {1 + Number(row.companion_count) === 1 ? "ticket" : "tickets"} · {rupees.format(Number(row.total_amount))} expected</span>{guests.length > 0 && <small>Guests: {guests.map((guest) => guest.full_name).join(", ")}</small>}</div>
+                        <div className="registrant-cell"><strong>{row.full_name}{row.age ? ` · Age ${row.age}` : ""}</strong><span>{row.phone} · {row.email}</span><span className="registration-amount">{1 + Number(row.companion_count)} {1 + Number(row.companion_count) === 1 ? "ticket" : "tickets"} · {rupees.format(Number(row.total_amount))} expected</span>{guests.length > 0 && <small>Guests: {guests.map((guest) => `${guest.full_name}${guest.age ? ` (Age ${guest.age})` : ""} · ${guest.phone ?? "No phone recorded"}`).join("; ")}</small>}</div>
                       </TableCell>
-                      <TableCell><div className="admin-ticket-list">{rowTickets.map((ticket) => <div className={`admin-ticket-row ${ticket.enabled ? "" : "disabled"}`} key={ticket.id}><div><strong>#{ticket.ticket_number} · {ticket.holder_name}</strong><small>{ticket.arrived ? "Arrived" : ticket.enabled ? "Ready" : "Disabled"}</small></div><label><Checkbox aria-label={`Enable ticket for ${ticket.holder_name}`} checked={Boolean(ticket.enabled)} onCheckedChange={(checked) => void toggleTicket(ticket.id, "enabled", checked === true)} /><span>Enabled</span></label><label><Checkbox aria-label={`Mark ticket for ${ticket.holder_name} arrived`} checked={Boolean(ticket.arrived)} disabled={!ticket.enabled} onCheckedChange={(checked) => void toggleTicket(ticket.id, "arrived", checked === true)} /><span>Arrived</span></label><div className="admin-ticket-note"><textarea aria-label={`Organizer note for ${ticket.holder_name}`} maxLength={500} rows={2} value={ticketNotes[ticket.id] ?? ""} onChange={(event) => setTicketNotes((current) => ({ ...current, [ticket.id]: event.target.value }))} placeholder="Private organizer note for this ticket…" /><Button type="button" variant="outline" onClick={() => void saveTicketNote(ticket.id)} disabled={savingTicketNoteId === ticket.id || (ticketNotes[ticket.id] ?? "") === ticket.organizer_note}>{savingTicketNoteId === ticket.id ? "Saving…" : savedTicketNoteId === ticket.id ? "Saved" : "Save note"}</Button></div></div>)}</div></TableCell>
+                      <TableCell><div className="admin-ticket-list">{rowTickets.map((ticket) => <div className={`admin-ticket-row ${ticket.enabled ? "" : "disabled"}`} key={ticket.id}><div><strong>#{ticket.ticket_number} · {ticket.holder_name}</strong><small>{ticket.arrived ? "Arrived" : ticket.enabled ? "Ready" : "Disabled"}</small></div><label><Checkbox aria-label={`Enable ticket for ${ticket.holder_name}`} checked={Boolean(ticket.enabled)} onCheckedChange={(checked) => void toggleTicket(ticket.id, "enabled", checked === true)} /><span>Enabled</span></label><label><Checkbox aria-label={`Mark ticket for ${ticket.holder_name} arrived`} checked={Boolean(ticket.arrived)} disabled={!ticket.enabled} onCheckedChange={(checked) => void toggleTicket(ticket.id, "arrived", checked === true)} /><span>Arrived</span></label><TicketQrAccess ticketId={ticket.id} holderName={ticket.holder_name} ticketNumber={ticket.ticket_number} enabled={ticket.enabled} variant="admin" /><div className="admin-ticket-note"><textarea aria-label={`Organizer note for ${ticket.holder_name}`} maxLength={500} rows={2} value={ticketNotes[ticket.id] ?? ""} onChange={(event) => setTicketNotes((current) => ({ ...current, [ticket.id]: event.target.value }))} placeholder="Private organizer note for this ticket…" /><Button type="button" variant="outline" onClick={() => void saveTicketNote(ticket.id)} disabled={savingTicketNoteId === ticket.id || (ticketNotes[ticket.id] ?? "") === ticket.organizer_note}>{savingTicketNoteId === ticket.id ? "Saving…" : savedTicketNoteId === ticket.id ? "Saved" : "Save note"}</Button></div></div>)}</div></TableCell>
                       <TableCell className="check-column"><Checkbox aria-label={`Verify ${row.full_name}`} checked={Boolean(row.verified)} onCheckedChange={(checked) => toggle(row.id, "verified", checked === true)} /></TableCell>
                       <TableCell className="action-column"><Button variant="ghost" className="remove-person-button" onClick={() => removePerson(row)} disabled={deletingId === row.id}><Trash2 aria-hidden="true" />{deletingId === row.id ? "Removing…" : "Remove"}</Button></TableCell>
                     </TableRow>

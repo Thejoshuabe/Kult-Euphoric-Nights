@@ -16,10 +16,10 @@ export async function GET(request: Request) {
     const sql = await getDatabase();
     const [registrations, companions, tickets] = await sql.transaction(
       [
-        sql`SELECT id, full_name, phone, email, companion_count, ticket_price, total_amount,
+        sql`SELECT id, full_name, age, phone, email, companion_count, ticket_price, total_amount,
                    verified, arrived, created_at
             FROM registrations ORDER BY created_at DESC`,
-        sql`SELECT id, registration_id, full_name, phone FROM companions ORDER BY registration_id, full_name`,
+        sql`SELECT id, registration_id, full_name, age, phone FROM companions ORDER BY registration_id, full_name`,
         sql`SELECT id, registration_id, holder_name, ticket_number, enabled, arrived, organizer_note
             FROM tickets ORDER BY registration_id, ticket_number`,
       ],
@@ -126,10 +126,12 @@ export async function POST(request: Request) {
     }
     const payload = (await request.json()) as {
       fullName?: string;
+      age?: number | string;
       phone?: string;
       email?: string;
     };
     const fullName = payload.fullName?.trim() ?? "";
+    const age = Number(payload.age);
     const phone = payload.phone?.trim() ?? "";
     const email = payload.email?.trim() ?? "";
     const normalizedPhone = normalizePhone(phone);
@@ -137,6 +139,9 @@ export async function POST(request: Request) {
 
     if (fullName.length < 2 || fullName.length > 80) {
       return Response.json({ error: "Please enter a valid full name." }, { status: 400 });
+    }
+    if (!Number.isInteger(age) || age < 16 || age > 24) {
+      return Response.json({ error: "Please select an age between 16 and 24." }, { status: 400 });
     }
     if (normalizedPhone.length < 7 || normalizedPhone.length > 15) {
       return Response.json({ error: "Please enter a valid phone number." }, { status: 400 });
@@ -178,12 +183,12 @@ export async function POST(request: Request) {
           inserted_registration AS (
             INSERT INTO registrations (
               id, code, client_registration_id, full_name, phone, email,
-              normalized_phone, normalized_email, companion_count, payment_confirmation_sent,
+              age, normalized_phone, normalized_email, companion_count, payment_confirmation_sent,
               ticket_price, total_amount
             )
             SELECT
               ${registrationId}, ${code}, ${clientRegistrationId}, ${fullName}, ${phone}, ${email},
-              ${normalizedPhone}, ${normalizedEmail}, 0, TRUE,
+              ${age}, ${normalizedPhone}, ${normalizedEmail}, 0, TRUE,
               settings.ticket_price, settings.ticket_price
             FROM settings, attendance
             WHERE settings.allow_over_capacity
@@ -205,7 +210,7 @@ export async function POST(request: Request) {
           );
         }
         const created = await sql`
-          SELECT id, full_name, phone, email, companion_count, ticket_price, total_amount,
+          SELECT id, full_name, age, phone, email, companion_count, ticket_price, total_amount,
                  verified, arrived, created_at
           FROM registrations WHERE id = ${registrationId} LIMIT 1
         `;
