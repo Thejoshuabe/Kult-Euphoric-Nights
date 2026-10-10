@@ -140,8 +140,8 @@ export async function POST(request: Request) {
     if (fullName.length < 2 || fullName.length > 80) {
       return Response.json({ error: "Please enter a valid full name." }, { status: 400 });
     }
-    if (!Number.isInteger(age) || age < 16 || age > 24) {
-      return Response.json({ error: "Please select an age between 16 and 24." }, { status: 400 });
+    if (!Number.isInteger(age) || age < 1) {
+      return Response.json({ error: "Please enter a valid age." }, { status: 400 });
     }
     if (normalizedPhone.length < 7 || normalizedPhone.length > 15) {
       return Response.json({ error: "Please enter a valid phone number." }, { status: 400 });

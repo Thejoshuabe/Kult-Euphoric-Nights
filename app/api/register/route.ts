@@ -32,8 +32,8 @@ export async function POST(request: Request) {
     if (fullName.length < 2 || fullName.length > 80) {
       return Response.json({ error: "Please enter your full name." }, { status: 400 });
     }
-    if (!Number.isInteger(age) || age < 16 || age > 24) {
-      return Response.json({ error: "Please select an age between 16 and 24." }, { status: 400 });
+    if (!Number.isInteger(age) || age < 1) {
+      return Response.json({ error: "Please enter a valid age." }, { status: 400 });
     }
     if (normalizedPhone.length < 7 || normalizedPhone.length > 15) {
       return Response.json({ error: "Please enter a valid phone number." }, { status: 400 });
@@ -52,9 +52,9 @@ export async function POST(request: Request) {
     }
     if (companions.some((person) => {
       const guestAge = Number(person.age);
-      return !Number.isInteger(guestAge) || guestAge < 16 || guestAge > 24;
+      return !Number.isInteger(guestAge) || guestAge < 1;
     })) {
-      return Response.json({ error: "Every guest must be between 16 and 24 years old." }, { status: 400 });
+      return Response.json({ error: "Please enter a valid age for every guest." }, { status: 400 });
     }
     if (companions.some((person) => {
       const guestPhone = normalizePhone(person.phone ?? "");

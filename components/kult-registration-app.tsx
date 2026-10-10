@@ -110,8 +110,6 @@ const rupees = new Intl.NumberFormat("en-IN", {
   currency: "INR",
   maximumFractionDigits: 0,
 });
-const ALLOWED_AGES = Array.from({ length: 9 }, (_, index) => index + 16);
-
 async function fetchRegistrationStatus() {
   const response = await fetch("/api/registration-status", { cache: "no-store" });
   const data = (await response.json()) as RegistrationStatus & { error?: string };
@@ -467,7 +465,7 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
   function validateContact() {
     if (fullName.trim().length < 2) return "Please enter your full name.";
     const numericAge = Number(age);
-    if (!Number.isInteger(numericAge) || numericAge < 16 || numericAge > 24) return "Please select your age between 16 and 24.";
+    if (!Number.isInteger(numericAge) || numericAge < 1) return "Please enter a valid age.";
     const digits = phone.replace(/\D/g, "");
     if (digits.length < 7 || digits.length > 15) return "Please enter a valid phone number.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Please enter a valid email address.";
@@ -508,8 +506,8 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
     if (companions.some((person) => !person.fullName.trim())) {
       return setError("Please enter the name of every accompanying guest.");
     }
-    if (companions.some((person) => !ALLOWED_AGES.includes(Number(person.age)))) {
-      return setError("Please select an age between 16 and 24 for every guest.");
+    if (companions.some((person) => !Number.isInteger(Number(person.age)) || Number(person.age) < 1)) {
+      return setError("Please enter a valid age for every guest.");
     }
     if (companions.some((person) => {
       const digits = person.phone.replace(/\D/g, "");
@@ -603,11 +601,8 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
                 <Field label="Full name" htmlFor="full-name">
                   <Input id="full-name" autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name" />
                 </Field>
-                <Field label="Age (16–24)" htmlFor="age">
-                  <select id="age" value={age} onChange={(event) => setAge(event.target.value)}>
-                    <option value="">Select age</option>
-                    {ALLOWED_AGES.map((allowedAge) => <option key={allowedAge} value={allowedAge}>{allowedAge}</option>)}
-                  </select>
+                <Field label="Age" htmlFor="age">
+                  <Input id="age" type="number" inputMode="numeric" min="1" step="1" value={age} onChange={(event) => setAge(event.target.value)} placeholder="Enter your age" />
                 </Field>
               </div>
               <div className="form-grid">
@@ -640,11 +635,8 @@ function RegistrationFlow({ onHome, onVerify }: { onHome: () => void; onVerify: 
                     <Field label="Guest name" htmlFor={`guest-name-${index}`}>
                       <Input id={`guest-name-${index}`} value={person.fullName} onChange={(event) => setCompanions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, fullName: event.target.value } : item))} placeholder="Full name" />
                     </Field>
-                    <Field label="Age (16–24)" htmlFor={`guest-age-${index}`}>
-                      <select id={`guest-age-${index}`} value={person.age} onChange={(event) => setCompanions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, age: event.target.value } : item))}>
-                        <option value="">Select age</option>
-                        {ALLOWED_AGES.map((allowedAge) => <option key={allowedAge} value={allowedAge}>{allowedAge}</option>)}
-                      </select>
+                    <Field label="Age" htmlFor={`guest-age-${index}`}>
+                      <Input id={`guest-age-${index}`} type="number" inputMode="numeric" min="1" step="1" value={person.age} onChange={(event) => setCompanions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, age: event.target.value } : item))} placeholder="Enter age" />
                     </Field>
                     <Field label="Phone number" htmlFor={`guest-phone-${index}`}>
                       <Input id={`guest-phone-${index}`} inputMode="tel" value={person.phone} onChange={(event) => setCompanions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, phone: event.target.value } : item))} placeholder="Required phone number" />
@@ -1315,7 +1307,7 @@ function OrganizerPage({ onHome }: { onHome: () => void }) {
               <div className="add-person-heading"><div><h3>Add a person</h3><p>For walk-ins or manual entries. One scannable ticket will be created automatically.</p></div><Users aria-hidden="true" /></div>
               <div className="add-person-fields">
                 <Field label="Full name" htmlFor="admin-full-name"><Input id="admin-full-name" value={newPerson.fullName} onChange={(event) => setNewPerson((current) => ({ ...current, fullName: event.target.value }))} placeholder="Full name" /></Field>
-                <Field label="Age (16–24)" htmlFor="admin-age"><select id="admin-age" value={newPerson.age} onChange={(event) => setNewPerson((current) => ({ ...current, age: event.target.value }))}><option value="">Select age</option>{ALLOWED_AGES.map((allowedAge) => <option key={allowedAge} value={allowedAge}>{allowedAge}</option>)}</select></Field>
+                <Field label="Age" htmlFor="admin-age"><Input id="admin-age" type="number" inputMode="numeric" min="1" step="1" value={newPerson.age} onChange={(event) => setNewPerson((current) => ({ ...current, age: event.target.value }))} placeholder="Enter age" /></Field>
                 <Field label="Phone number" htmlFor="admin-phone"><Input id="admin-phone" inputMode="tel" value={newPerson.phone} onChange={(event) => setNewPerson((current) => ({ ...current, phone: event.target.value }))} placeholder="+91 98765 43210" /></Field>
                 <Field label="Email ID" htmlFor="admin-email"><Input id="admin-email" type="email" value={newPerson.email} onChange={(event) => setNewPerson((current) => ({ ...current, email: event.target.value }))} placeholder="you@example.com" /></Field>
               </div>
